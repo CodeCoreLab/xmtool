@@ -3,7 +3,9 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using RemoteDesktopPlus.Models;
 using RemoteDesktopPlus.Services;
+using RemoteDesktopPlus.ViewModels;
 using RemoteDesktopPlus.Views;
 
 namespace RemoteDesktopPlus;
@@ -53,19 +55,24 @@ public partial class App : Application
 
 		base.OnStartup(e);
 		RdpLauncher.CleanupTempFiles();
-		DatabaseService.Instance.Initialize();
+		DatabaseService db = DatabaseService.Instance;
+		CryptoService crypto = CryptoService.Instance;
+		db.Initialize();
+		// 组合根：整个程序只有这里把服务实例与视图实现装配到一起。
+		WpfDialogService dialogs = new WpfDialogService();
 
-		if (DatabaseService.Instance.HasLaunchPassword() && !new LoginWindow().ShowDialog().GetValueOrDefault())
+		if (db.HasLaunchPassword() && !new LoginWindow().ShowDialog().GetValueOrDefault())
 		{
 			Shutdown();
 			return;
 		}
-		if (CryptoService.Instance.IsMasterPasswordConfigured() && !CryptoService.Instance.HasMasterKey)
+		if (crypto.IsMasterPasswordConfigured() && !crypto.HasMasterKey)
 		{
-			new MasterPasswordWindow(MasterPasswordPurpose.Unlock).ShowDialog();
+			dialogs.ShowMasterPassword(MasterPasswordPurpose.Unlock);
 		}
 
-		MainWindow mainWindow = new MainWindow();
+		MainViewModel viewModel = new MainViewModel(db, crypto, dialogs);
+		MainWindow mainWindow = new MainWindow(viewModel);
 		base.MainWindow = mainWindow;
 		mainWindow.Closed += delegate
 		{

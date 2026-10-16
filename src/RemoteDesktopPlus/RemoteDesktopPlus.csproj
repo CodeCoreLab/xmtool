@@ -22,6 +22,14 @@
   <ItemGroup>
     <Resource Include="app.ico" />
   </ItemGroup>
+  <!-- 测试工程位于 tests\ 子目录；必须显式排除，否则 SDK 默认通配会把测试代码编进主程序集 -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+    <ApplicationDefinition Remove="tests\**" />
+    <Resource Remove="tests\**" />
+  </ItemGroup>
   <ItemGroup>
     <Analyzer Include="analyzers\CommunityToolkit.Mvvm.SourceGenerators.dll" />
     <Analyzer Include="analyzers\CommunityToolkit.Mvvm.CodeFixers.dll" />

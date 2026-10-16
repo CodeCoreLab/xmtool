@@ -230,9 +230,9 @@ public sealed class DatabaseService
 
 	public bool HasLaunchPassword()
 	{
-		if (!string.IsNullOrEmpty(GetSetting("launch.password.hash")))
+		if (!string.IsNullOrEmpty(GetSetting(SettingKeys.LaunchPasswordHash)))
 		{
-			return !string.IsNullOrEmpty(GetSetting("launch.password.salt"));
+			return !string.IsNullOrEmpty(GetSetting(SettingKeys.LaunchPasswordSalt));
 		}
 		return false;
 	}

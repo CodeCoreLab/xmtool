@@ -3,9 +3,8 @@
   <shell:WindowChrome.WindowChrome>
     <shell:WindowChrome CaptionHeight="58" ResizeBorderThickness="0" CornerRadius="0" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
   </shell:WindowChrome.WindowChrome>
-  <FrameworkElement.DataContext>
-    <vm:MainViewModel />
-  </FrameworkElement.DataContext>
+  <!-- DataContext 不再由 XAML 直接 new（那会绕过依赖注入），
+       改由 MainWindow 构造函数接收 MainViewModel 后赋值。见 RemoteDesktopPlus.Views/MainWindow.cs。 -->
   <FrameworkElement.Resources>
     <ResourceDictionary>
       <conv:StatusToBrushConverter x:Key="StatusToBrushConverter" />

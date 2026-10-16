@@ -35,9 +35,10 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	public event PropertyChangedEventHandler? PropertyChanged;
 
-	public MainWindow()
+	public MainWindow(MainViewModel viewModel)
 	{
 		InitializeComponent();
+		base.DataContext = viewModel;
 		base.Loaded += OnLoaded;
 	}
 
