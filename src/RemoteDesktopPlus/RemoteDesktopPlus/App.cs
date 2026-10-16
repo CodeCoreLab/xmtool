@@ -1,17 +1,18 @@
 using System;
-using System.CodeDom.Compiler;
-using System.Diagnostics;
 using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
-using System.Windows.Threading;
 using RemoteDesktopPlus.Services;
 using RemoteDesktopPlus.Views;
 
 namespace RemoteDesktopPlus;
 
-public class App : Application
+/// <summary>
+/// 应用入口。视图结构见 App.xaml；<c>InitializeComponent</c> 与 <c>Main</c> 由 XAML 编译器生成
+/// （见 obj\**\App.g.cs），故此处不再手写。
+/// </summary>
+public partial class App : Application
 {
 	private const string MutexName = "Local\\RemoteDesktopPlusPlus.SingleInstance.Mutex";
 
@@ -23,18 +24,17 @@ public class App : Application
 
 	private TrayController? _tray;
 
-	private bool _contentLoaded;
-
 	protected override void OnStartup(StartupEventArgs e)
 	{
 		SQLitePCL.Batteries.Init();
-		_instanceMutex = new Mutex(initiallyOwned: true, "Local\\RemoteDesktopPlusPlus.SingleInstance.Mutex", out var createdNew);
+		// 单实例：第二个实例通过命名管道唤醒已运行的实例后自行退出。
+		_instanceMutex = new Mutex(initiallyOwned: true, MutexName, out bool createdNew);
 		if (!createdNew)
 		{
 			try
 			{
-				using NamedPipeClientStream namedPipeClientStream = new NamedPipeClientStream(".", "RemoteDesktopPlusPlus.SingleInstance.Activate", PipeDirection.Out);
-				namedPipeClientStream.Connect(800);
+				using NamedPipeClientStream pipe = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
+				pipe.Connect(800);
 			}
 			catch
 			{
@@ -50,9 +50,11 @@ public class App : Application
 			Shutdown();
 			return;
 		}
+
 		base.OnStartup(e);
 		RdpLauncher.CleanupTempFiles();
 		DatabaseService.Instance.Initialize();
+
 		if (DatabaseService.Instance.HasLaunchPassword() && !new LoginWindow().ShowDialog().GetValueOrDefault())
 		{
 			Shutdown();
@@ -62,7 +64,9 @@ public class App : Application
 		{
 			new MasterPasswordWindow(MasterPasswordPurpose.Unlock).ShowDialog();
 		}
-		MainWindow mainWindow = (MainWindow)(base.MainWindow = new MainWindow());
+
+		MainWindow mainWindow = new MainWindow();
+		base.MainWindow = mainWindow;
 		mainWindow.Closed += delegate
 		{
 			Shutdown();
@@ -74,7 +78,6 @@ public class App : Application
 
 	private void StartActivationListener(Window main)
 	{
-		Window main2 = main;
 		_pipeCts = new CancellationTokenSource();
 		CancellationToken token = _pipeCts.Token;
 		Task.Run(async delegate
@@ -83,11 +86,11 @@ public class App : Application
 			{
 				try
 				{
-					using NamedPipeServerStream server = new NamedPipeServerStream("RemoteDesktopPlusPlus.SingleInstance.Activate", PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
+					using NamedPipeServerStream server = new NamedPipeServerStream(PipeName, PipeDirection.In, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous);
 					await server.WaitForConnectionAsync(token).ConfigureAwait(continueOnCapturedContext: false);
-					((DispatcherObject)this).Dispatcher.Invoke((Action)delegate
+					Dispatcher.Invoke(delegate
 					{
-						BringToFront(main2);
+						BringToFront(main);
 					});
 				}
 				catch (OperationCanceledException)
@@ -160,27 +163,5 @@ public class App : Application
 		{
 		}
 		base.OnExit(e);
-	}
-
-	[DebuggerNonUserCode]
-	[GeneratedCode("PresentationBuildTasks", "9.0.5.0")]
-	public void InitializeComponent()
-	{
-		if (!_contentLoaded)
-		{
-			_contentLoaded = true;
-			Uri resourceLocator = new Uri("/远程桌面连接++;component/app.xaml", UriKind.Relative);
-			Application.LoadComponent(this, resourceLocator);
-		}
-	}
-
-	[STAThread]
-	[DebuggerNonUserCode]
-	[GeneratedCode("PresentationBuildTasks", "9.0.5.0")]
-	public static void Main()
-	{
-		App app = new App();
-		app.InitializeComponent();
-		app.Run();
 	}
 }

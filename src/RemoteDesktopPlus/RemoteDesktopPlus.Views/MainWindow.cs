@@ -1,29 +1,20 @@
-using System;
-using System.CodeDom.Compiler;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Markup;
 using System.Windows.Media;
 using RemoteDesktopPlus.Models;
 using RemoteDesktopPlus.ViewModels;
 
 namespace RemoteDesktopPlus.Views;
 
-public class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
+/// <summary>
+/// 主窗口。视图结构见 Views/MainWindow.xaml。
+/// </summary>
+public partial class MainWindow : Window, INotifyPropertyChanged
 {
 	private bool _showPlainPasswordOnMain;
-
-	internal PasswordBox PwdBox;
-
-	internal TextBox PlainPwdBox;
-
-	internal DataGrid ConnList;
-
-	private bool _contentLoaded;
 
 	public bool ShowPlainPasswordOnMain
 	{
@@ -33,11 +24,12 @@ public class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
 		}
 		set
 		{
-			if (_showPlainPasswordOnMain != value)
+			if (_showPlainPasswordOnMain == value)
 			{
-				_showPlainPasswordOnMain = value;
-				OnPropertyChanged("ShowPlainPasswordOnMain");
+				return;
 			}
+			_showPlainPasswordOnMain = value;
+			OnPropertyChanged();
 		}
 	}
 
@@ -51,17 +43,15 @@ public class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
 	{
-		object dataContext = base.DataContext;
-		MainViewModel vm = dataContext as MainViewModel;
-		if (vm == null)
+		if (base.DataContext is not MainViewModel mainViewModel)
 		{
 			return;
 		}
-		vm.PropertyChanged += delegate(object? _, PropertyChangedEventArgs args)
+		mainViewModel.PropertyChanged += delegate(object? _, PropertyChangedEventArgs args)
 		{
-			if (args.PropertyName == "Password" && PwdBox.Password != vm.Password)
+			if (args.PropertyName == nameof(MainViewModel.Password) && PwdBox.Password != mainViewModel.Password)
 			{
-				PwdBox.Password = vm.Password;
+				PwdBox.Password = mainViewModel.Password;
 			}
 		};
 	}
@@ -86,21 +76,23 @@ public class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
 
 	private void AboutButton_Click(object sender, RoutedEventArgs e)
 	{
-		AboutWindow aboutWindow = new AboutWindow();
-		aboutWindow.Owner = this;
+		AboutWindow aboutWindow = new AboutWindow
+		{
+			Owner = this
+		};
 		aboutWindow.ShowDialog();
 	}
 
 	private void ConnList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
 	{
-		if (sender is DataGrid)
+		if (sender is not DataGrid)
 		{
-			object originalSource = e.OriginalSource;
-			DataGridRow dataGridRow = FindAncestor<DataGridRow>((DependencyObject?)((originalSource is DependencyObject) ? originalSource : null));
-			if (dataGridRow != null && dataGridRow.Item is ConnectionItem item && base.DataContext is MainViewModel mainViewModel)
-			{
-				mainViewModel.ConnectItem(item);
-			}
+			return;
+		}
+		DataGridRow? row = FindAncestor<DataGridRow>(e.OriginalSource as DependencyObject);
+		if (row?.Item is ConnectionItem item && base.DataContext is MainViewModel mainViewModel)
+		{
+			mainViewModel.ConnectItem(item);
 		}
 	}
 
@@ -108,63 +100,17 @@ public class MainWindow : Window, INotifyPropertyChanged, IComponentConnector
 	{
 		while (d != null)
 		{
-			T val = (T)(object)((d is T) ? d : null);
-			if (val != null)
+			if (d is T t)
 			{
-				return val;
+				return t;
 			}
 			d = VisualTreeHelper.GetParent(d);
 		}
-		return default(T);
+		return null;
 	}
 
 	private void OnPropertyChanged([CallerMemberName] string? name = null)
 	{
 		this.PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name ?? string.Empty));
-	}
-
-	[DebuggerNonUserCode]
-	[GeneratedCode("PresentationBuildTasks", "9.0.5.0")]
-	public void InitializeComponent()
-	{
-		if (!_contentLoaded)
-		{
-			_contentLoaded = true;
-			Uri resourceLocator = new Uri("/远程桌面连接++;component/views/mainwindow.xaml", UriKind.Relative);
-			Application.LoadComponent(this, resourceLocator);
-		}
-	}
-
-	[DebuggerNonUserCode]
-	[GeneratedCode("PresentationBuildTasks", "9.0.5.0")]
-	[EditorBrowsable(EditorBrowsableState.Never)]
-	void IComponentConnector.Connect(int connectionId, object target)
-	{
-		switch (connectionId)
-		{
-		case 1:
-			((Button)target).Click += AboutButton_Click;
-			break;
-		case 2:
-			((Button)target).Click += MinimizeButton_Click;
-			break;
-		case 3:
-			((Button)target).Click += CloseButton_Click;
-			break;
-		case 4:
-			PwdBox = (PasswordBox)target;
-			PwdBox.PasswordChanged += PwdBox_PasswordChanged;
-			break;
-		case 5:
-			PlainPwdBox = (TextBox)target;
-			break;
-		case 6:
-			ConnList = (DataGrid)target;
-			ConnList.MouseDoubleClick += ConnList_MouseDoubleClick;
-			break;
-		default:
-			_contentLoaded = true;
-			break;
-		}
 	}
 }

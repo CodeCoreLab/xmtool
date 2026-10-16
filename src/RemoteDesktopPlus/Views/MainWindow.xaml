@@ -1,0 +1,639 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="RemoteDesktopPlus.Views.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:dd="urn:gong-wpf-dragdrop" xmlns:vm="clr-namespace:RemoteDesktopPlus.ViewModels" xmlns:m="clr-namespace:RemoteDesktopPlus.Models" xmlns:conv="clr-namespace:RemoteDesktopPlus.Converters" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Title="小马远程桌面  " Height="920" Width="1280" ResizeMode="CanMinimize" WindowStyle="None" AllowsTransparency="False" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display" TextOptions.TextRenderingMode="ClearType" Background="{StaticResource WarmCanvasBrush}" WindowStartupLocation="CenterScreen" Icon="/app.ico" xmlns:views="clr-namespace:RemoteDesktopPlus.Views">
+  <shell:WindowChrome.WindowChrome>
+    <shell:WindowChrome CaptionHeight="58" ResizeBorderThickness="0" CornerRadius="0" GlassFrameThickness="0" UseAeroCaptionButtons="False" />
+  </shell:WindowChrome.WindowChrome>
+  <FrameworkElement.DataContext>
+    <vm:MainViewModel />
+  </FrameworkElement.DataContext>
+  <FrameworkElement.Resources>
+    <ResourceDictionary>
+      <conv:StatusToBrushConverter x:Key="StatusToBrushConverter" />
+      <conv:StatusToTextConverter x:Key="StatusToTextConverter" />
+      <conv:BoolToBrushConverter x:Key="BoolToBrushConverter" />
+      <Style x:Key="StatusBadgeBg" TargetType="{x:Type Border}">
+        <Setter Property="Border.CornerRadius" Value="8" />
+        <Setter Property="Border.Padding" Value="10,4" />
+        <Setter Property="HorizontalAlignment" Value="Left" />
+        <Setter Property="VerticalAlignment" Value="Center" />
+        <Setter Property="Background" Value="{StaticResource Surface3Brush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+        <Style.Triggers>
+          <DataTrigger Value="Online" Binding="{Binding Status}">
+            <Setter Property="Background" Value="{StaticResource SuccessSoftBgBrush}" />
+            <Setter Property="BorderBrush" Value="#3310B981" />
+          </DataTrigger>
+          <DataTrigger Value="Offline" Binding="{Binding Status}">
+            <Setter Property="Background" Value="{StaticResource DangerSoftBgBrush}" />
+            <Setter Property="BorderBrush" Value="#33EF4444" />
+          </DataTrigger>
+          <DataTrigger Value="Checking" Binding="{Binding Status}">
+            <Setter Property="Background" Value="{StaticResource AccentSoftBgBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource AccentSoftBorderBrush}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+      <Style x:Key="StatusBadgeText" TargetType="{x:Type TextBlock}">
+        <Setter Property="Foreground" Value="{StaticResource InkMutedBrush}" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Style.Triggers>
+          <DataTrigger Value="Online" Binding="{Binding Status}">
+            <Setter Property="Foreground" Value="{StaticResource SuccessSoftTextBrush}" />
+          </DataTrigger>
+          <DataTrigger Value="Offline" Binding="{Binding Status}">
+            <Setter Property="Foreground" Value="{StaticResource DangerSoftTextBrush}" />
+          </DataTrigger>
+          <DataTrigger Value="Checking" Binding="{Binding Status}">
+            <Setter Property="Foreground" Value="{StaticResource AccentSoftTextBrush}" />
+          </DataTrigger>
+        </Style.Triggers>
+      </Style>
+      <Style x:Key="InlineDivider" TargetType="{x:Type Border}">
+        <Setter Property="Height" Value="1" />
+        <Setter Property="Background" Value="{StaticResource HairlineBrush}" />
+        <Setter Property="Margin" Value="0,20,0,20" />
+      </Style>
+      <Style x:Key="ToolTileButton" TargetType="{x:Type Button}">
+        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+        <Setter Property="Background" Value="{StaticResource Surface1Brush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="14,12" />
+        <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+        <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Name="Bd" Background="{TemplateBinding Control.Background}" BorderBrush="{TemplateBinding Control.BorderBrush}" BorderThickness="{TemplateBinding Control.BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Control.Padding}">
+                <UIElement.Effect>
+                  <DropShadowEffect Color="#0F172A" Opacity="0.04" BlurRadius="8" ShadowDepth="1.5" Direction="270" />
+                </UIElement.Effect>
+                <ContentPresenter HorizontalAlignment="Stretch" VerticalAlignment="Stretch" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="UIElement.IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource Surface2Brush}" />
+                  <Setter TargetName="Bd" Property="Border.BorderBrush" Value="{StaticResource AccentBrush}" />
+                  <Setter TargetName="Bd" Property="UIElement.Effect">
+                    <Setter.Value>
+                      <DropShadowEffect Color="#2563EB" Opacity="0.22" BlurRadius="18" ShadowDepth="3" Direction="270" />
+                    </Setter.Value>
+                  </Setter>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource Surface3Brush}" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="ConnectButton" TargetType="{x:Type Button}" BasedOn="{StaticResource ButtonPrimary}">
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Name="Bd" Background="{TemplateBinding Control.Background}" CornerRadius="12">
+                <Grid>
+                  <Border CornerRadius="12,12,0,0" VerticalAlignment="Top" Height="16" IsHitTestVisible="False" Background="{StaticResource CardTopHighlightBrush}" />
+                  <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" Margin="{TemplateBinding Control.Padding}" TextElement.Foreground="{TemplateBinding Control.Foreground}" />
+                </Grid>
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="UIElement.IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource AccentGradientHoverBrush}" />
+                  <Setter Property="UIElement.Effect">
+                    <Setter.Value>
+                      <DropShadowEffect Color="#2563EB" Opacity="0.48" BlurRadius="24" ShadowDepth="6" Direction="270" />
+                    </Setter.Value>
+                  </Setter>
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource AccentPressBrush}" />
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource Surface3Brush}" />
+                  <Setter Property="Foreground" Value="{StaticResource InkSubtleBrush}" />
+                  <Setter Property="UIElement.Effect" Value="{x:Null}" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="WinIconButton" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+        <Setter Property="Background" Value="#00FFFFFF" />
+        <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Name="Bd" Background="{TemplateBinding Control.Background}" CornerRadius="8">
+                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="UIElement.IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource HoverOverlayBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource PressOverlayBrush}" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="WinMinButton" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+        <Setter Property="Background" Value="#00FFFFFF" />
+        <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Name="Bd" Background="{TemplateBinding Control.Background}" CornerRadius="8">
+                <Path Name="Gly" Width="11" Height="11" Stretch="Uniform" StrokeThickness="1.4" Data="M1,8 L13,8" HorizontalAlignment="Center" VerticalAlignment="Center" Stroke="{StaticResource InkMutedBrush}" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="UIElement.IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource HoverOverlayBrush}" />
+                  <Setter TargetName="Gly" Property="Shape.Stroke" Value="{StaticResource InkBrush}" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource PressOverlayBrush}" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="WinCloseButton" TargetType="{x:Type Button}">
+        <Setter Property="Width" Value="34" />
+        <Setter Property="Height" Value="30" />
+        <Setter Property="FrameworkElement.Cursor" Value="Hand" />
+        <Setter Property="Background" Value="#00FFFFFF" />
+        <Setter Property="FrameworkElement.FocusVisualStyle" Value="{x:Null}" />
+        <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="{x:Type Button}">
+              <Border Name="Bd" Background="{TemplateBinding Control.Background}" CornerRadius="8">
+                <Path Name="Gly" Width="11" Height="11" Stretch="Uniform" StrokeThickness="1.4" Data="M2,2 L12,12 M12,2 L2,12" HorizontalAlignment="Center" VerticalAlignment="Center" Stroke="{StaticResource InkMutedBrush}" />
+              </Border>
+              <ControlTemplate.Triggers>
+                <Trigger Property="UIElement.IsMouseOver" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource DangerBrush}" />
+                  <Setter TargetName="Gly" Property="Shape.Stroke" Value="#FFFFFFFF" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                  <Setter TargetName="Bd" Property="Border.Background" Value="{StaticResource DangerSoftTextBrush}" />
+                  <Setter TargetName="Gly" Property="Shape.Stroke" Value="#FFFFFFFF" />
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+    </ResourceDictionary>
+  </FrameworkElement.Resources>
+  <Border BorderThickness="1.2" Background="{StaticResource WarmCanvasBrush}" SnapsToDevicePixels="True">
+    <Border.BorderBrush>
+      <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+        <GradientStop Color="#662563EB" Offset="0" />
+        <GradientStop Color="#3306B6D4" Offset="0.5" />
+        <GradientStop Color="#1A2563EB" Offset="1" />
+      </LinearGradientBrush>
+    </Border.BorderBrush>
+    <Grid>
+      <Ellipse Width="640" Height="640" Fill="{StaticResource BlobBlueBrush}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="-280,-260,0,0" IsHitTestVisible="False" />
+      <Ellipse Width="720" Height="720" Fill="{StaticResource BlobPurpleBrush}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-360,-300,0" IsHitTestVisible="False" />
+      <Ellipse Width="540" Height="540" Fill="{StaticResource BlobRoseBrush}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-220,-260" IsHitTestVisible="False" />
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" Margin="32,12,32,0" Height="42">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+          </Grid.ColumnDefinitions>
+          <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+            <Border Width="38" Height="38" CornerRadius="10" Background="{StaticResource AccentGradientBrush}" VerticalAlignment="Center" Margin="0,0,12,0">
+              <UIElement.Effect>
+                <DropShadowEffect Color="#2563EB" Opacity="0.48" BlurRadius="16" ShadowDepth="3" Direction="270" />
+              </UIElement.Effect>
+              <Grid>
+                <Border CornerRadius="10,10,0,0" VerticalAlignment="Top" Height="13" Background="{StaticResource CardTopHighlightBrush}" />
+                <Path Data="M5,5 L11,5 L11,11 L17,11 L17,17 L11,17 L11,11 L5,11" Fill="#FFFFFFFF" Stretch="Uniform" Width="17" Height="17" HorizontalAlignment="Center" VerticalAlignment="Center" />
+              </Grid>
+            </Border>
+            <StackPanel VerticalAlignment="Center">
+              <TextBlock Text="小马远程桌面  " FontSize="16.5" FontWeight="Bold" Foreground="{StaticResource InkBrush}" />
+              <TextBlock Text="Remote Desktop Plus" FontSize="10" FontWeight="Medium" Foreground="{StaticResource InkSubtleBrush}" Margin="0,1,0,0" />
+            </StackPanel>
+          </StackPanel>
+          <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+            <Border CornerRadius="8" Padding="10,5" Margin="0,0,10,0" VerticalAlignment="Center" Background="{StaticResource Surface2Brush}" BorderBrush="{StaticResource HairlineStrongBrush}" BorderThickness="1">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                <Path Width="13" Height="13" Stretch="Uniform" Margin="0,0,7,0" Stroke="{StaticResource InkSubtleBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Data="M3,5 L21,5 L21,16 L3,16 M8,20 L16,20 M12,16 L12,20" VerticalAlignment="Center" />
+                <TextBlock Text="Windows 10 Enterprise LTSC 2021" FontSize="11" FontWeight="Medium" Foreground="{StaticResource InkMutedBrush}" VerticalAlignment="Center" />
+              </StackPanel>
+            </Border>
+            <Border CornerRadius="8" Padding="11,6" VerticalAlignment="Center" Background="{StaticResource AccentSoftBgBrush}" BorderBrush="{StaticResource AccentSoftBorderBrush}" BorderThickness="1">
+              <StackPanel Orientation="Horizontal">
+                <Ellipse Width="8" Height="8" Margin="0,0,8,0" Fill="{Binding IsRemoteEnabled, Converter={StaticResource BoolToBrushConverter}}">
+                  <UIElement.Effect>
+                    <DropShadowEffect Color="#10B981" Opacity="0.6" BlurRadius="6" ShadowDepth="0" />
+                  </UIElement.Effect>
+                </Ellipse>
+                <TextBlock FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentSoftTextBrush}" VerticalAlignment="Center">
+                  <Run Text="本机远程桌面 " /> <Run Text="{Binding IsRemoteEnabled, Converter={x:Static conv:BoolToOnOffConverter.Instance}}" /></TextBlock>
+              </StackPanel>
+            </Border>
+            <Button Style="{StaticResource WinIconButton}" ToolTip="关于" Margin="6,0,0,0" Click="AboutButton_Click">
+              <Path Width="15" Height="15" Stretch="Uniform" Stroke="{StaticResource InkMutedBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" Data="M12,3 A9,9 0 1 0 12,21A9,9 0 1 0 12,3M12,8 L12,8 M12,11 L12,16" />
+            </Button>
+            <Border Width="1" Height="20" VerticalAlignment="Center" Margin="8,0,6,0" Background="{StaticResource HairlineStrongBrush}" />
+            <Button Style="{StaticResource WinMinButton}" ToolTip="最小化" Click="MinimizeButton_Click" />
+            <Button Style="{StaticResource WinCloseButton}" ToolTip="关闭" Margin="2,0,0,0" Click="CloseButton_Click" />
+          </StackPanel>
+        </Grid>
+        <Grid Margin="32,12,32,24">
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="480" />
+            <ColumnDefinition Width="32" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <Border Grid.Column="0" Style="{StaticResource CardElevated}" Padding="24">
+            <Grid>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+              </Grid.RowDefinitions>
+              <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto" CanContentScroll="False" Padding="0,0,4,0">
+                <StackPanel>
+                  <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                      <Border Style="{StaticResource SectionAccentBar}" Height="22" />
+                      <StackPanel>
+                        <TextBlock Text="新建连接" Style="{StaticResource DisplayTitle}" />
+                      </StackPanel>
+                    </StackPanel>
+                    <TextBlock Text="填写主机信息后点击连接，记录会自动保存到列表。" Style="{StaticResource HelperText}" Margin="0,8,0,16" />
+                  </StackPanel>
+                  <TextBlock Style="{StaticResource Eyebrow}" Text="计算机" />
+                  <Grid Margin="0,8,0,14">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="12" />
+                      <ColumnDefinition Width="100" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" MinHeight="42" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" />
+                    <TextBox Grid.Column="2" MinHeight="42" FontFamily="{StaticResource MonoFont}" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
+                  </Grid>
+                  <TextBlock Style="{StaticResource Eyebrow}" Text="用户名" />
+                  <TextBox Margin="0,8,0,14" MinHeight="42" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
+                  <TextBlock Style="{StaticResource Eyebrow}" Text="密码" />
+                  <Grid Margin="0,8,0,0">
+                    <PasswordBox Name="PwdBox" Padding="12,10,38,10" MinHeight="42" Visibility="{Binding ShowPlainPasswordOnMain, Converter={x:Static conv:InverseBoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" PasswordChanged="PwdBox_PasswordChanged" />
+                    <TextBox Name="PlainPwdBox" Padding="12,10,38,10" MinHeight="42" Text="{Binding Password, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding ShowPlainPasswordOnMain, Converter={x:Static conv:BoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0" Width="24" Height="24" Padding="0" Background="#00FFFFFF" BorderThickness="0" Cursor="Hand" Focusable="False" ToolTip="显示/隐藏密码" IsChecked="{Binding ShowPlainPasswordOnMain, RelativeSource={RelativeSource AncestorType=Window}}">
+                      <Control.Template>
+                        <ControlTemplate TargetType="{x:Type ToggleButton}">
+                          <Border Background="#00FFFFFF">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                          </Border>
+                        </ControlTemplate>
+                      </Control.Template>
+                      <Path Width="16" Height="16" Stretch="Uniform" Fill="{StaticResource InkSubtleBrush}" Data="{Binding ShowPlainPasswordOnMain, Converter={x:Static conv:BoolToEyeIconConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
+                    </ToggleButton>
+                  </Grid>
+                  <Border Height="1" Background="{StaticResource HairlineBrush}" Margin="0,16,0,16" />
+                  <Border Style="{StaticResource InsetBlock}" Padding="16">
+                    <StackPanel>
+                      <TextBlock Style="{StaticResource Eyebrow}" Text="显示与挂载" />
+                      <Grid Margin="0,12,0,0">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="80" />
+                          <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="分辨率" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" MinHeight="40" ItemsSource="{Binding ResolutionOptions}" SelectedItem="{Binding Resolution}" />
+                      </Grid>
+                      <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                        <CheckBox Content="连接本地盘符" IsChecked="{Binding RedirectLocalDrive}" />
+                        <ComboBox Width="64" Margin="10,0,22,0" ItemsSource="{Binding DriveLetters}" SelectedItem="{Binding LocalDriveLetter}" />
+                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                  <Grid Margin="0,16,0,0">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="12" />
+                      <ColumnDefinition Width="2*" />
+                    </Grid.ColumnDefinitions>
+                    <Button Grid.Column="0" Content="保 存" Style="{StaticResource ButtonSecondary}" Height="44" Command="{Binding SaveItemCommand}" />
+                    <Button Grid.Column="2" Content="连 接" Style="{StaticResource ConnectButton}" Height="44" FontSize="14" FontWeight="SemiBold" Command="{Binding ConnectCommand}" />
+                  </Grid>
+                </StackPanel>
+              </ScrollViewer>
+              <UniformGrid Grid.Row="1" Rows="2" Columns="2" Margin="0,16,0,0">
+                <FrameworkElement.Resources>
+                  <ResourceDictionary>
+                    <Style x:Key="{x:Type Button}" TargetType="{x:Type Button}" BasedOn="{StaticResource ToolTileButton}">
+                      <Setter Property="Margin" Value="0,0,8,8" />
+                      <Setter Property="Padding" Value="12,10" />
+                    </Style>
+                  </ResourceDictionary>
+                </FrameworkElement.Resources>
+                <Button Command="{Binding SetLaunchPasswordCommand}">
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="38" Height="38" CornerRadius="10" Background="{StaticResource IconBoxBlueBrush}">
+                      <Path Width="18" Height="18" Stretch="Uniform" Fill="{StaticResource AccentBrush}" Data="M12,1 C8.69,1 6,3.69 6,7 L6,11 L4,11 L4,21 L20,21 L20,11 L18,11 L18,7 C18,3.69 15.31,1 12,1 M12,3 C14.21,3 16,4.79 16,7 L16,11 L8,11 L8,7 C8,4.79 9.79,3 12,3" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="启动密码" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                      <TextBlock Text="启动时验证" FontSize="10" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+                <Button Command="{Binding SetMasterPasswordCommand}">
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="38" Height="38" CornerRadius="10" Background="{StaticResource IconBoxPeachBrush}">
+                      <Path Width="18" Height="18" Stretch="Uniform" Fill="{StaticResource PeachBrush}" Data="M12,2 L4,6 L4,12 C4,17 7.5,21 12,22 C16.5,21 20,17 20,12 L20,6 L12,2" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="主密码" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                      <TextBlock Text="跨机器迁移" FontSize="10" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+                <Button Command="{Binding ExportDataCommand}">
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="38" Height="38" CornerRadius="10" Background="{StaticResource IconBoxMintBrush}">
+                      <Path Width="18" Height="18" Stretch="Uniform" Stroke="{StaticResource MintBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Data="M12,3 L12,15 M12,15 L7,10 M12,15 L17,10 M5,19 L19,19" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="导出数据" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                      <TextBlock Text="备份到文件" FontSize="10" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+                <Button Command="{Binding ImportDataCommand}">
+                  <StackPanel Orientation="Horizontal">
+                    <Border Width="38" Height="38" CornerRadius="10" Background="{StaticResource IconBoxLavenderBrush}">
+                      <Path Width="18" Height="18" Stretch="Uniform" Stroke="{StaticResource LavenderBrush}" StrokeThickness="2" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Data="M12,17 L12,5 M12,5 L7,10 M12,5 L17,10 M5,19 L19,19" />
+                    </Border>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                      <TextBlock Text="导入数据" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource InkBrush}" />
+                      <TextBlock Text="从文件恢复" FontSize="10" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
+                    </StackPanel>
+                  </StackPanel>
+                </Button>
+              </UniformGrid>
+            </Grid>
+          </Border>
+          <Grid Column="2">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*" />
+              <RowDefinition Height="24" />
+              <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource CardElevated}" Padding="0">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <Grid Row="0" Margin="28,24,28,18">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0">
+                    <StackPanel Orientation="Horizontal">
+                      <Border Style="{StaticResource SectionAccentBar}" />
+                      <StackPanel>
+                        <StackPanel Orientation="Horizontal">
+                          <TextBlock Text="服务器列表" Style="{StaticResource DisplayTitle}" FontSize="20" />
+                          <Border CornerRadius="9999" Background="{StaticResource AccentSoftBgBrush}" Padding="10,3" Margin="12,4,0,0" VerticalAlignment="Center">
+                            <TextBlock Foreground="{StaticResource AccentSoftTextBrush}" FontSize="11" FontWeight="Bold" Text="{Binding Connections.Count}" />
+                          </Border>
+                        </StackPanel>
+                      </StackPanel>
+                    </StackPanel>
+                  </StackPanel>
+                  <Button Grid.Column="2" Style="{StaticResource ButtonSecondary}" Margin="0,0,10,0" Height="36" Command="{Binding ScanOnlineCommand}">
+                    <StackPanel Orientation="Horizontal">
+                      <Path Width="13" Height="13" Stretch="Uniform" Fill="{StaticResource InkMutedBrush}" Data="M12,2 A10,10 0 1 0 12,22A10,10 0 1 0 12,2M12,4 A8,8 0 1 1 12,20A8,8 0 1 1 12,4M12,7 L12,12 L16,14" Margin="0,0,7,0" />
+                      <TextBlock Text="扫描在线" VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
+                  <Button Grid.Column="3" Content="+ 新建" Style="{StaticResource ButtonPrimary}" MinWidth="96" Height="36" Command="{Binding NewItemCommand}" />
+                </Grid>
+                <Grid Row="1">
+                  <DataGrid Name="ConnList" SelectionMode="Single" SelectionUnit="FullRow" CanUserReorderColumns="False" IsReadOnly="True" dd:DragDrop.IsDragSource="True" dd:DragDrop.IsDropTarget="True" dd:DragDrop.UseDefaultDragAdorner="True" ItemsSource="{Binding Connections}" SelectedItem="{Binding SelectedConnection}" dd:DragDrop.DropHandler="{Binding}" MouseDoubleClick="ConnList_MouseDoubleClick">
+                    <DataGrid.Columns>
+                      <DataGridTemplateColumn Header="#" Width="48" CanUserResize="False" HeaderStringFormat="">
+                        <DataGridColumn.HeaderStyle>
+                          <Style BasedOn="{StaticResource {x:Type DataGridColumnHeader}}" TargetType="{x:Type DataGridColumnHeader}">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                          </Style>
+                        </DataGridColumn.HeaderStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <TextBlock Foreground="{StaticResource InkSubtleBrush}" FontFamily="{StaticResource MonoFont}" FontSize="11" HorizontalAlignment="Center" VerticalAlignment="Center" Text="{Binding Index}" />
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTemplateColumn Header="主机 IP" Width="*" MinWidth="180">
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                              <Border Width="32" Height="32" CornerRadius="8" Background="{StaticResource IconBoxBlueBrush}" Margin="0,0,12,0">
+                                <Path Width="15" Height="15" Stretch="Uniform" Fill="{StaticResource AccentBrush}" Data="M3,5 L21,5 L21,17 L3,17 M3,17 L8,21 L16,21 L21,17" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                              </Border>
+                              <TextBlock Foreground="{StaticResource InkBrush}" FontFamily="{StaticResource MonoFont}" FontWeight="Medium" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding Host}" />
+                            </StackPanel>
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTemplateColumn Header="端口" Width="80">
+                        <DataGridColumn.HeaderStyle>
+                          <Style BasedOn="{StaticResource {x:Type DataGridColumnHeader}}" TargetType="{x:Type DataGridColumnHeader}">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                          </Style>
+                        </DataGridColumn.HeaderStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <TextBlock Foreground="{StaticResource InkMutedBrush}" FontFamily="{StaticResource MonoFont}" HorizontalAlignment="Center" VerticalAlignment="Center" Text="{Binding Port}" />
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTemplateColumn Header="账号" Width="140">
+                        <DataGridColumn.HeaderStyle>
+                          <Style BasedOn="{StaticResource {x:Type DataGridColumnHeader}}" TargetType="{x:Type DataGridColumnHeader}">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                          </Style>
+                        </DataGridColumn.HeaderStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <TextBlock Foreground="{StaticResource InkSoftBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding UserName}" />
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTemplateColumn Header="备注" Width="2*" MinWidth="160">
+                        <DataGridColumn.HeaderStyle>
+                          <Style BasedOn="{StaticResource {x:Type DataGridColumnHeader}}" TargetType="{x:Type DataGridColumnHeader}">
+                            <Setter Property="HorizontalContentAlignment" Value="Center" />
+                          </Style>
+                        </DataGridColumn.HeaderStyle>
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <TextBlock Foreground="{StaticResource InkMutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{Binding Remark}" />
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                      <DataGridTemplateColumn Header="状态" Width="100" CanUserResize="False">
+                        <DataGridTemplateColumn.CellTemplate>
+                          <DataTemplate>
+                            <Border Style="{StaticResource StatusBadgeBg}">
+                              <StackPanel Orientation="Horizontal">
+                                <Border Width="6" Height="6" CornerRadius="3" Margin="0,0,7,0" Background="{Binding Status, Converter={StaticResource StatusToBrushConverter}}" />
+                                <TextBlock Style="{StaticResource StatusBadgeText}" Text="{Binding Status, Converter={StaticResource StatusToTextConverter}}" />
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                      </DataGridTemplateColumn>
+                    </DataGrid.Columns>
+                    <FrameworkElement.ContextMenu>
+                      <ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}">
+                        <MenuItem Header="新建..." Command="{Binding NewItemCommand}" />
+                        <MenuItem Header="编辑选中..." Command="{Binding EditSelectedCommand}" />
+                        <MenuItem Header="删除选中" Command="{Binding DeleteSelectedCommand}" />
+                        <Separator />
+                        <MenuItem Header="连接选中" Command="{Binding ConnectCommand}" />
+                        <MenuItem Header="修复凭证" Command="{Binding RepairCredentialCommand}" />
+                        <MenuItem Header="扫描在线状态" Command="{Binding ScanOnlineCommand}" />
+                      </ContextMenu>
+                    </FrameworkElement.ContextMenu>
+                  </DataGrid>
+                  <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False">
+                    <FrameworkElement.Style>
+                      <Style TargetType="{x:Type StackPanel}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                          <DataTrigger Value="0" Binding="{Binding Connections.Count}">
+                            <Setter Property="Visibility" Value="Visible" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </FrameworkElement.Style>
+                    <Border Width="76" Height="76" CornerRadius="20" Background="{StaticResource IconBoxBlueBrush}" HorizontalAlignment="Center">
+                      <UIElement.Effect>
+                        <DropShadowEffect Color="#2563EB" Opacity="0.25" BlurRadius="28" ShadowDepth="4" />
+                      </UIElement.Effect>
+                      <Path Width="34" Height="34" Stretch="Uniform" Fill="{StaticResource AccentBrush}" Data="M3,5 L21,5 L21,17 L3,17 M3,17 L8,21 L16,21 L21,17" />
+                    </Border>
+                    <TextBlock Text="暂无连接记录" Foreground="{StaticResource InkBrush}" FontSize="16" FontWeight="SemiBold" Margin="0,20,0,0" HorizontalAlignment="Center" />
+                    <TextBlock Text="点击右上角 + 新建 添加第一台主机" Foreground="{StaticResource InkSubtleBrush}" FontSize="12" Margin="0,8,0,0" HorizontalAlignment="Center" />
+                  </StackPanel>
+                </Grid>
+              </Grid>
+            </Border>
+            <Border Grid.Row="2" Style="{StaticResource Card}" Padding="28,22">
+              <Grid>
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto" />
+                  <RowDefinition Height="18" />
+                  <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Grid Row="0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <StackPanel Grid.Column="0" Orientation="Horizontal">
+                    <Border Style="{StaticResource SectionAccentBar}" />
+                    <StackPanel>
+                      <TextBlock Text="服务端设置" Style="{StaticResource SectionTitle}" />
+                    </StackPanel>
+                  </StackPanel>
+                  <Border Grid.Column="1" CornerRadius="8" Padding="12,5" VerticalAlignment="Center">
+                    <FrameworkElement.Style>
+                      <Style TargetType="{x:Type Border}">
+                        <Setter Property="Background" Value="{StaticResource Surface3Brush}" />
+                        <Setter Property="BorderBrush" Value="{StaticResource HairlineBrush}" />
+                        <Setter Property="BorderThickness" Value="1" />
+                        <Style.Triggers>
+                          <DataTrigger Value="True" Binding="{Binding IsPortListening}">
+                            <Setter Property="Background" Value="{StaticResource SuccessSoftBgBrush}" />
+                            <Setter Property="BorderBrush" Value="#3310B981" />
+                          </DataTrigger>
+                        </Style.Triggers>
+                      </Style>
+                    </FrameworkElement.Style>
+                    <StackPanel Orientation="Horizontal">
+                      <Ellipse Width="7" Height="7" Margin="0,0,8,0" Fill="{Binding IsPortListening, Converter={StaticResource BoolToBrushConverter}}">
+                        <UIElement.Effect>
+                          <DropShadowEffect Color="#10B981" Opacity="0.55" BlurRadius="6" ShadowDepth="0" />
+                        </UIElement.Effect>
+                      </Ellipse>
+                      <TextBlock FontSize="11" FontWeight="SemiBold">
+                        <FrameworkElement.Style>
+                          <Style TargetType="{x:Type TextBlock}">
+                            <Setter Property="Foreground" Value="{StaticResource InkMutedBrush}" />
+                            <Style.Triggers>
+                              <DataTrigger Value="True" Binding="{Binding IsPortListening}">
+                                <Setter Property="Foreground" Value="{StaticResource SuccessSoftTextBrush}" />
+                              </DataTrigger>
+                            </Style.Triggers>
+                          </Style>
+                        </FrameworkElement.Style>
+                        <Run Text="监听 " /> <Run FontFamily="{StaticResource MonoFont}" Text="{Binding CurrentRdpPort, Mode=OneWay}" /></TextBlock>
+                    </StackPanel>
+                  </Border>
+                </Grid>
+                <Border Grid.Row="2" Style="{StaticResource InsetBlock}" Padding="20,16">
+                  <Grid>
+                    <Grid.RowDefinitions>
+                      <RowDefinition Height="Auto" />
+                      <RowDefinition Height="8" />
+                      <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="22" />
+                      <ColumnDefinition Width="Auto" />
+                      <ColumnDefinition Width="*" />
+                      <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource Eyebrow}" Text="当前端口" />
+                    <TextBlock Grid.Row="0" Grid.Column="2" Style="{StaticResource Eyebrow}" Text="新端口" />
+                    <TextBlock Grid.Row="2" Grid.Column="0" FontFamily="{StaticResource MonoFont}" FontSize="26" FontWeight="Bold" Foreground="{StaticResource AccentGradientBrush}" VerticalAlignment="Center" Text="{Binding CurrentRdpPort}" />
+                    <Path Grid.Row="2" Grid.Column="1" Width="14" Height="14" Stretch="Uniform" Stroke="{StaticResource InkSubtleBrush}" StrokeThickness="1.6" StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round" Data="M2,8 L14,8 M9,3 L14,8 L9,13" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                    <TextBox Grid.Row="2" Grid.Column="2" Width="140" MinHeight="42" FontFamily="{StaticResource MonoFont}" FontSize="14" Padding="12,0" VerticalContentAlignment="Center" Text="{Binding NewPort, UpdateSourceTrigger=PropertyChanged}" />
+                    <StackPanel Grid.Row="2" Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center">
+                      <Button Style="{StaticResource ButtonSecondary}" Margin="0,0,8,0" MinWidth="96" Height="42" Content="{Binding IsRemoteEnabled, Converter={x:Static conv:BoolToToggleTextConverter.Instance}}" Command="{Binding ToggleRemoteCommand}" />
+                      <Button Content="还 原" Style="{StaticResource ButtonSecondary}" Margin="0,0,8,0" MinWidth="76" Height="42" Command="{Binding RestorePortCommand}" />
+                      <Button Content="修改端口" Style="{StaticResource ButtonPrimary}" MinWidth="100" Height="42" Command="{Binding ChangePortCommand}" />
+                    </StackPanel>
+                  </Grid>
+                </Border>
+              </Grid>
+            </Border>
+          </Grid>
+        </Grid>
+      </DockPanel>
+    </Grid>
+  </Border>
+</Window>

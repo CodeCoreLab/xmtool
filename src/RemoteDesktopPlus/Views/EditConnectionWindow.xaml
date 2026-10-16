@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window x:Class="RemoteDesktopPlus.Views.EditConnectionWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:conv="clr-namespace:RemoteDesktopPlus.Converters" Title="添加服务器" Width="460" SizeToContent="Height" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False" Background="{StaticResource CanvasBrush}" Icon="/app.ico" xmlns:views="clr-namespace:RemoteDesktopPlus.Views">
+  <Border Margin="0" Background="{StaticResource CanvasBrush}">
+    <Grid Margin="24">
+      <Grid.RowDefinitions>
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+        <RowDefinition Height="Auto" />
+      </Grid.RowDefinitions>
+      <StackPanel Grid.Row="0" Margin="0,0,0,18">
+        <TextBlock Style="{StaticResource DisplayTitle}" FontSize="20" Margin="0,4,0,0" Text="{Binding TitleText, RelativeSource={RelativeSource AncestorType=Window}}" />
+      </StackPanel>
+      <StackPanel Grid.Row="1">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="14" />
+            <ColumnDefinition Width="100" />
+          </Grid.ColumnDefinitions>
+          <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+          </Grid.RowDefinitions>
+          <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Eyebrow}" Text="IP / 域名" />
+            <TextBlock Text="*" Foreground="{StaticResource DangerBrush}" Margin="4,0,0,0" />
+          </StackPanel>
+          <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Eyebrow}" Text="端口" />
+            <TextBlock Text="*" Foreground="{StaticResource DangerBrush}" Margin="4,0,0,0" />
+          </StackPanel>
+          <TextBox Name="IpBox" Grid.Row="1" Grid.Column="0" FontFamily="{StaticResource MonoFont}" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" />
+          <TextBox Grid.Row="1" Grid.Column="2" FontFamily="{StaticResource MonoFont}" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
+        </Grid>
+        <StackPanel Margin="0,14,0,0">
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Eyebrow}" Text="登陆账号" />
+            <TextBlock Text="*" Foreground="{StaticResource DangerBrush}" Margin="4,0,0,0" />
+          </StackPanel>
+          <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
+        </StackPanel>
+        <StackPanel Margin="0,14,0,0">
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Style="{StaticResource Eyebrow}" Text="登陆密码" />
+          </StackPanel>
+          <Grid>
+            <PasswordBox Name="PwdBox" Padding="10,6,32,6" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:InverseBoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" PasswordChanged="PwdBox_PasswordChanged" />
+            <TextBox Name="PlainBox" Padding="10,6,32,6" Text="{Binding PlainPassword, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:BoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" Width="24" Height="24" Padding="0" Background="#00FFFFFF" BorderThickness="0" Cursor="Hand" Focusable="False" ToolTip="显示/隐藏密码" IsChecked="{Binding ShowPlainPassword, RelativeSource={RelativeSource AncestorType=Window}}">
+              <Control.Template>
+                <ControlTemplate TargetType="{x:Type ToggleButton}">
+                  <Border Background="#00FFFFFF">
+                    <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  </Border>
+                </ControlTemplate>
+              </Control.Template>
+              <Path Width="16" Height="16" Stretch="Uniform" Fill="{StaticResource InkSubtleBrush}" Data="{Binding ShowPlainPassword, Converter={x:Static conv:BoolToEyeIconConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
+            </ToggleButton>
+          </Grid>
+        </StackPanel>
+        <StackPanel Margin="0,14,0,0">
+          <TextBlock Style="{StaticResource Eyebrow}" Text="备注" Margin="0,0,0,6" />
+          <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Text="{Binding Remark, UpdateSourceTrigger=PropertyChanged}" />
+        </StackPanel>
+        <TextBlock Text="* 为必填项" Foreground="{StaticResource InkSubtleBrush}" FontSize="11" Margin="0,12,0,0" HorizontalAlignment="Right" />
+      </StackPanel>
+      <Grid Row="2" Margin="0,20,0,0">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" />
+          <ColumnDefinition Width="Auto" />
+          <ColumnDefinition Width="Auto" />
+        </Grid.ColumnDefinitions>
+        <Button Grid.Column="1" Content="取消" Style="{StaticResource ButtonSecondary}" MinWidth="80" Margin="0,0,8,0" IsCancel="True" Click="Cancel_Click" />
+        <Button Name="OkButton" Grid.Column="2" Style="{StaticResource ButtonPrimary}" MinWidth="100" IsDefault="True" Content="{Binding OkButtonText, RelativeSource={RelativeSource AncestorType=Window}}" Click="Ok_Click" />
+      </Grid>
+    </Grid>
+  </Border>
+</Window>

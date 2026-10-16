@@ -20,7 +20,7 @@
     <RootNamespace />
   </PropertyGroup>
   <ItemGroup>
-    <EmbeddedResource Include="app.g.resources" LogicalName="$(AssemblyName).g.resources" />
+    <Resource Include="app.ico" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="CommunityToolkit.Mvvm">
