@@ -20,7 +20,11 @@ public partial class MasterPasswordWindow : Window
 		InitializeComponent();
 		Purpose = purpose;
 		bool configured = CryptoService.Instance.IsMasterPasswordConfigured();
-		ShowOldPassword = configured ? Visibility.Visible : Visibility.Collapsed;
+		// 解锁场景必然要填原主密码；设置场景仅在「已有主密码、需先验原密码」时才需要。
+		// 一次算清，避免在下方分支里再改一次只读属性。
+		ShowOldPassword = purpose == MasterPasswordPurpose.Unlock || configured
+			? Visibility.Visible
+			: Visibility.Collapsed;
 		TitleText = purpose switch
 		{
 			MasterPasswordPurpose.Set => configured ? "修改主密码" : "设置主密码",
@@ -34,7 +38,6 @@ public partial class MasterPasswordWindow : Window
 			NewPwd.Visibility = Visibility.Collapsed;
 			ConfirmPwd.Visibility = Visibility.Collapsed;
 			OldPwd.Visibility = Visibility.Visible;
-			ShowOldPassword = Visibility.Visible;
 		}
 	}
 

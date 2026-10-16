@@ -18,6 +18,13 @@
     <ApplicationIcon>app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace />
+    <!--
+      WFAC010：WinForms 分析器要求把高 DPI 从 app.manifest 挪到 ApplicationHighDpiMode。
+      本项目是 WPF 主体，PerMonitorV2 只能由 manifest 提供（ApplicationHighDpiMode 走的是
+      WinForms 的运行时路径，对 WPF 窗口不生效）。WinForms 仅用于托盘 NotifyIcon，
+      不涉及任何 Form 的高 DPI 布局，故保留 manifest 写法并在此显式静默该告警。
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="app.ico" />
