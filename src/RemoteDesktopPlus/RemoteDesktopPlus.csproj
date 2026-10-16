@@ -1,0 +1,46 @@
+<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+  <PropertyGroup>
+    <AssemblyName>远程桌面连接++</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>True</UseWPF>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="app.g.resources" LogicalName="$(AssemblyName).g.resources" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="CommunityToolkit.Mvvm">
+      <HintPath>libs\CommunityToolkit.Mvvm.dll</HintPath>
+    </Reference>
+    <Reference Include="GongSolutions.WPF.DragDrop">
+      <HintPath>libs\GongSolutions.WPF.DragDrop.dll</HintPath>
+    </Reference>
+    <Reference Include="Microsoft.Data.Sqlite">
+      <HintPath>libs\Microsoft.Data.Sqlite.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.core">
+      <HintPath>libs\SQLitePCLRaw.core.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.provider.e_sqlite3">
+      <HintPath>libs\SQLitePCLRaw.provider.e_sqlite3.dll</HintPath>
+    </Reference>
+    <Reference Include="SQLitePCLRaw.batteries_v2">
+      <HintPath>libs\SQLitePCLRaw.batteries_v2.dll</HintPath>
+    </Reference>
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
+  </ItemGroup>
+</Project>

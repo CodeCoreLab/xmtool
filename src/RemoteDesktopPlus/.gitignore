@@ -1,0 +1,22 @@
+## Build output
+bin/
+obj/
+*.user
+*.suo
+.vs/
+
+## Local runtime data (per-machine, never commit)
+data.db
+data.db-shm
+data.db-wal
+*.rdp
+
+## Decompiler / analysis scratch (kept outside the repo)
+_decomp/
+_baml_xaml/
+_xaml_dump/
+_tools/
+
+## OS noise
+Thumbs.db
+desktop.ini
