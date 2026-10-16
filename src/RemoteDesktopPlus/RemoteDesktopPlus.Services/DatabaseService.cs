@@ -42,7 +42,8 @@ public sealed class DatabaseService
 		}
 	}
 
-	private static readonly Lazy<DatabaseService> _instance = new Lazy<DatabaseService>(() => new DatabaseService());
+	private static readonly Lazy<DatabaseService> _instance = new Lazy<DatabaseService>(() =>
+		new DatabaseService(Path.Combine(AppContext.BaseDirectory, "data.db")));
 
 	private readonly string _connectionString;
 
@@ -56,10 +57,13 @@ public sealed class DatabaseService
 
 	public string DbPath { get; }
 
-	private DatabaseService()
+	/// <summary>
+	/// 以指定库文件创建实例。生产走 <see cref="Instance"/>（AppContext.BaseDirectory\data.db）；
+	/// 单元测试用本构造指向临时文件，避免污染真实库。
+	/// </summary>
+	public DatabaseService(string dbPath)
 	{
-		string baseDirectory = AppContext.BaseDirectory;
-		DbPath = Path.Combine(baseDirectory, "data.db");
+		DbPath = dbPath;
 		_connectionString = new SqliteConnectionStringBuilder
 		{
 			DataSource = DbPath,

@@ -7,9 +7,14 @@ using RemoteDesktopPlus.Models;
 
 namespace RemoteDesktopPlus.Services;
 
+/// <summary>
+/// 凭据加解密与主密码/启动密码管理。
+/// 密文前缀语义：<c>D1$</c> = DPAPI(CurrentUser)，<c>M1$</c> = 主密码派生的 AES-256-GCM。
+/// </summary>
 public sealed class CryptoService
 {
-	private static readonly Lazy<CryptoService> _instance = new Lazy<CryptoService>(() => new CryptoService());
+	private static readonly Lazy<CryptoService> _instance =
+		new Lazy<CryptoService>(() => new CryptoService(DatabaseService.Instance));
 
 	private const string PrefixDpapi = "D1$";
 
@@ -25,34 +30,43 @@ public sealed class CryptoService
 
 	private const int TagBytes = 16;
 
-	private byte[]? _masterKey;
-
 	private static readonly byte[] DpapiEntropy = Encoding.UTF8.GetBytes("RemoteDesktopPlus.Salt.v1");
 
+	private readonly DatabaseService _db;
+
+	private byte[]? _masterKey;
+
+	/// <summary>生产环境默认实例（绑定 <see cref="DatabaseService.Instance"/>）。</summary>
 	public static CryptoService Instance => _instance.Value;
 
 	public bool HasMasterKey => _masterKey != null;
 
-	public static bool IsMasterPasswordConfigured()
+	/// <summary>以指定的存储创建实例，便于单元测试注入临时库。</summary>
+	public CryptoService(DatabaseService db)
 	{
-		return !string.IsNullOrEmpty(DatabaseService.Instance.GetSetting("master.key.verifier"));
+		_db = db ?? throw new ArgumentNullException(nameof(db));
+	}
+
+	public bool IsMasterPasswordConfigured()
+	{
+		return !string.IsNullOrEmpty(_db.GetSetting(SettingKeys.MasterKeyVerifier));
 	}
 
 	public bool Unlock(string masterPassword)
 	{
-		string setting = DatabaseService.Instance.GetSetting("master.key.salt");
-		string setting2 = DatabaseService.Instance.GetSetting("master.key.verifier");
-		if (string.IsNullOrEmpty(setting) || string.IsNullOrEmpty(setting2))
+		string saltB64 = _db.GetSetting(SettingKeys.MasterKeySalt);
+		string verifier = _db.GetSetting(SettingKeys.MasterKeyVerifier);
+		if (string.IsNullOrEmpty(saltB64) || string.IsNullOrEmpty(verifier))
 		{
 			return false;
 		}
-		byte[] salt = Convert.FromBase64String(setting);
-		byte[] array = DeriveKey(masterPassword, salt);
+		byte[] salt = Convert.FromBase64String(saltB64);
+		byte[] key = DeriveKey(masterPassword, salt);
 		try
 		{
-			if (AesGcmDecrypt(setting2, array) == "OK")
+			if (AesGcmDecrypt(verifier, key) == "OK")
 			{
-				_masterKey = array;
+				_masterKey = key;
 				return true;
 			}
 		}
@@ -62,78 +76,82 @@ public sealed class CryptoService
 		return false;
 	}
 
+	/// <summary>设置/修改主密码：全量重加密所有条目，事务内完成，失败回滚。</summary>
 	public void SetMasterPassword(string newPassword, IEnumerable<ConnectionItem> existingItems)
 	{
-		List<(ConnectionItem, string, string)> source = existingItems.Select((ConnectionItem it) => (Item: it, OriginalCipher: it.EncryptedPassword, Plain: Decrypt(it.EncryptedPassword))).ToList();
-		byte[] bytes = RandomNumberGenerator.GetBytes(16);
-		byte[] key = DeriveKey(newPassword, bytes);
+		var source = existingItems
+			.Select(item => (Item: item, OriginalCipher: item.EncryptedPassword, Plain: Decrypt(item.EncryptedPassword)))
+			.ToList();
+		byte[] salt = RandomNumberGenerator.GetBytes(SaltBytes);
+		byte[] key = DeriveKey(newPassword, salt);
 		string verifier = AesGcmEncrypt("OK", key);
-		string saltB64 = Convert.ToBase64String(bytes);
-		List<(ConnectionItem Item, string OriginalCipher, string NewCipher)> newCiphers = source.Select<(ConnectionItem, string, string), (ConnectionItem, string, string)>(((ConnectionItem Item, string OriginalCipher, string Plain) s) => (Item: s.Item, OriginalCipher: s.OriginalCipher, NewCipher: "M1$" + AesGcmEncrypt(s.Plain, key))).ToList();
-		byte[] masterKey = _masterKey;
+		string saltB64 = Convert.ToBase64String(salt);
+		var newCiphers = source
+			.Select(s => (s.Item, s.OriginalCipher, NewCipher: PrefixMaster + AesGcmEncrypt(s.Plain, key)))
+			.ToList();
+
+		byte[]? previousKey = _masterKey;
 		try
 		{
-			DatabaseService.Instance.RunInTransaction(delegate
+			_db.RunInTransaction(delegate
 			{
-				DatabaseService.Instance.SetSetting("master.key.salt", saltB64);
-				DatabaseService.Instance.SetSetting("master.key.verifier", verifier);
-				foreach (var item5 in newCiphers)
+				_db.SetSetting(SettingKeys.MasterKeySalt, saltB64);
+				_db.SetSetting(SettingKeys.MasterKeyVerifier, verifier);
+				foreach (var entry in newCiphers)
 				{
-					ConnectionItem item3 = item5.Item;
-					string item4 = item5.NewCipher;
-					item3.EncryptedPassword = item4;
-					DatabaseService.Instance.Update(item3);
+					entry.Item.EncryptedPassword = entry.NewCipher;
+					_db.Update(entry.Item);
 				}
 			});
 			_masterKey = key;
 		}
 		catch
 		{
-			foreach (var item6 in newCiphers)
+			foreach (var entry in newCiphers)
 			{
-				ConnectionItem item = item6.Item;
-				string item2 = item6.OriginalCipher;
-				item.EncryptedPassword = item2;
+				entry.Item.EncryptedPassword = entry.OriginalCipher;
 			}
-			_masterKey = masterKey;
+			_masterKey = previousKey;
 			throw;
 		}
 	}
 
+	/// <summary>移除主密码：回退为 DPAPI 形态，事务内完成，失败回滚。</summary>
 	public void RemoveMasterPassword(IEnumerable<ConnectionItem> existingItems)
 	{
 		if (!HasMasterKey)
 		{
 			throw new InvalidOperationException("请先解锁。");
 		}
-		List<(ConnectionItem, string, string)> source = existingItems.Select((ConnectionItem it) => (Item: it, OriginalCipher: it.EncryptedPassword, Plain: Decrypt(it.EncryptedPassword))).ToList();
-		List<(ConnectionItem Item, string OriginalCipher, string NewCipher)> newCiphers = source.Select<(ConnectionItem, string, string), (ConnectionItem, string, string)>(((ConnectionItem Item, string OriginalCipher, string Plain) s) => (Item: s.Item, OriginalCipher: s.OriginalCipher, NewCipher: "D1$" + DpapiEncrypt(s.Plain))).ToList();
-		byte[] masterKey = _masterKey;
+		var source = existingItems
+			.Select(item => (Item: item, OriginalCipher: item.EncryptedPassword, Plain: Decrypt(item.EncryptedPassword)))
+			.ToList();
+		var newCiphers = source
+			.Select(s => (s.Item, s.OriginalCipher, NewCipher: PrefixDpapi + DpapiEncrypt(s.Plain)))
+			.ToList();
+
+		byte[]? previousKey = _masterKey;
 		try
 		{
-			DatabaseService.Instance.RunInTransaction(delegate
+			_db.RunInTransaction(delegate
 			{
-				DatabaseService.Instance.DeleteSetting("master.key.salt");
-				DatabaseService.Instance.DeleteSetting("master.key.verifier");
-				foreach (var item5 in newCiphers)
+				_db.DeleteSetting(SettingKeys.MasterKeySalt);
+				_db.DeleteSetting(SettingKeys.MasterKeyVerifier);
+				foreach (var entry in newCiphers)
 				{
-					ConnectionItem item3 = item5.Item;
-					string item4 = item5.NewCipher;
-					item3.EncryptedPassword = item4;
-					DatabaseService.Instance.Update(item3);
+					entry.Item.EncryptedPassword = entry.NewCipher;
+					_db.Update(entry.Item);
 				}
 			});
 			_masterKey = null;
 		}
 		catch
 		{
-			foreach (var item6 in newCiphers)
+			foreach (var entry in newCiphers)
 			{
-				ConnectionItem item = item6.Item;
-				string item2 = item6.OriginalCipher;
-				item.EncryptedPassword = item2;
+				entry.Item.EncryptedPassword = entry.OriginalCipher;
 			}
-			_masterKey = masterKey;
+			_masterKey = previousKey;
 			throw;
 		}
 	}
@@ -146,11 +164,12 @@ public sealed class CryptoService
 		}
 		if (_masterKey != null)
 		{
-			return "M1$" + AesGcmEncrypt(plain, _masterKey);
+			return PrefixMaster + AesGcmEncrypt(plain, _masterKey);
 		}
-		return "D1$" + DpapiEncrypt(plain);
+		return PrefixDpapi + DpapiEncrypt(plain);
 	}
 
+	/// <summary>解密失败一律返回空串，不抛出（调用方无需处理损坏密文）。</summary>
 	public string Decrypt(string cipher)
 	{
 		if (string.IsNullOrEmpty(cipher))
@@ -159,17 +178,17 @@ public sealed class CryptoService
 		}
 		try
 		{
-			if (cipher.StartsWith("M1$", StringComparison.Ordinal))
+			if (cipher.StartsWith(PrefixMaster, StringComparison.Ordinal))
 			{
 				if (_masterKey == null)
 				{
 					return string.Empty;
 				}
-				return AesGcmDecrypt(cipher.AsSpan("M1$".Length).ToString(), _masterKey);
+				return AesGcmDecrypt(cipher.Substring(PrefixMaster.Length), _masterKey);
 			}
-			if (cipher.StartsWith("D1$", StringComparison.Ordinal))
+			if (cipher.StartsWith(PrefixDpapi, StringComparison.Ordinal))
 			{
-				return DpapiDecrypt(cipher.AsSpan("D1$".Length).ToString());
+				return DpapiDecrypt(cipher.Substring(PrefixDpapi.Length));
 			}
 			return DpapiDecrypt(cipher);
 		}
@@ -181,18 +200,20 @@ public sealed class CryptoService
 
 	public static string HashLaunchPassword(string password, out string saltB64)
 	{
-		byte[] bytes = RandomNumberGenerator.GetBytes(16);
-		saltB64 = Convert.ToBase64String(bytes);
-		return Convert.ToBase64String(Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), bytes, 200000, HashAlgorithmName.SHA256, 32));
+		byte[] salt = RandomNumberGenerator.GetBytes(SaltBytes);
+		saltB64 = Convert.ToBase64String(salt);
+		return Convert.ToBase64String(Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, Pbkdf2Iter, HashAlgorithmName.SHA256, KeyBytes));
 	}
 
+	/// <summary>定时安全比较，防时序侧信道。</summary>
 	public static bool VerifyLaunchPassword(string password, string hashB64, string saltB64)
 	{
 		try
 		{
 			byte[] salt = Convert.FromBase64String(saltB64);
-			byte[] array = Convert.FromBase64String(hashB64);
-			return CryptographicOperations.FixedTimeEquals(Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, 200000, HashAlgorithmName.SHA256, 32), array);
+			byte[] expected = Convert.FromBase64String(hashB64);
+			byte[] actual = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, Pbkdf2Iter, HashAlgorithmName.SHA256, KeyBytes);
+			return CryptographicOperations.FixedTimeEquals(actual, expected);
 		}
 		catch
 		{
@@ -202,38 +223,46 @@ public sealed class CryptoService
 
 	private static byte[] DeriveKey(string password, byte[] salt)
 	{
-		return Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, 200000, HashAlgorithmName.SHA256, 32);
+		return Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(password), salt, Pbkdf2Iter, HashAlgorithmName.SHA256, KeyBytes);
 	}
 
 	private static string AesGcmEncrypt(string plain, byte[] key)
 	{
-		byte[] bytes = RandomNumberGenerator.GetBytes(12);
-		byte[] bytes2 = Encoding.UTF8.GetBytes(plain);
-		byte[] array = new byte[bytes2.Length];
-		byte[] array2 = new byte[16];
-		using AesGcm aesGcm = new AesGcm(key, 16);
-		aesGcm.Encrypt(bytes, bytes2, array, array2);
-		byte[] array3 = new byte[bytes.Length + array2.Length + array.Length];
-		Buffer.BlockCopy(bytes, 0, array3, 0, bytes.Length);
-		Buffer.BlockCopy(array2, 0, array3, bytes.Length, array2.Length);
-		Buffer.BlockCopy(array, 0, array3, bytes.Length + array2.Length, array.Length);
-		return Convert.ToBase64String(array3);
+		byte[] nonce = RandomNumberGenerator.GetBytes(NonceBytes);
+		byte[] plainBytes = Encoding.UTF8.GetBytes(plain);
+		byte[] cipher = new byte[plainBytes.Length];
+		byte[] tag = new byte[TagBytes];
+		using (AesGcm aes = new AesGcm(key, TagBytes))
+		{
+			aes.Encrypt(nonce, plainBytes, cipher, tag);
+		}
+		// 装机格式：nonce | tag | cipher，再整体 Base64
+		byte[] packed = new byte[nonce.Length + tag.Length + cipher.Length];
+		Buffer.BlockCopy(nonce, 0, packed, 0, nonce.Length);
+		Buffer.BlockCopy(tag, 0, packed, nonce.Length, tag.Length);
+		Buffer.BlockCopy(cipher, 0, packed, nonce.Length + tag.Length, cipher.Length);
+		return Convert.ToBase64String(packed);
 	}
 
 	private static string AesGcmDecrypt(string cipherB64, byte[] key)
 	{
-		byte[] array = Convert.FromBase64String(cipherB64);
-		if (array.Length < 28)
+		byte[] packed = Convert.FromBase64String(cipherB64);
+		if (packed.Length < NonceBytes + TagBytes)
 		{
 			throw new CryptographicException("密文长度不足");
 		}
-		byte[] nonce = array.AsSpan(0, 12).ToArray();
-		byte[] tag = array.AsSpan(12, 16).ToArray();
-		byte[] array2 = array.AsSpan(28).ToArray();
-		byte[] array3 = new byte[array2.Length];
-		using AesGcm aesGcm = new AesGcm(key, 16);
-		aesGcm.Decrypt(nonce, array2, tag, array3);
-		return Encoding.UTF8.GetString(array3);
+		byte[] nonce = new byte[NonceBytes];
+		byte[] tag = new byte[TagBytes];
+		byte[] cipher = new byte[packed.Length - NonceBytes - TagBytes];
+		Buffer.BlockCopy(packed, 0, nonce, 0, NonceBytes);
+		Buffer.BlockCopy(packed, NonceBytes, tag, 0, TagBytes);
+		Buffer.BlockCopy(packed, NonceBytes + TagBytes, cipher, 0, cipher.Length);
+		byte[] plain = new byte[cipher.Length];
+		using (AesGcm aes = new AesGcm(key, TagBytes))
+		{
+			aes.Decrypt(nonce, cipher, tag, plain);
+		}
+		return Encoding.UTF8.GetString(plain);
 	}
 
 	private static string DpapiEncrypt(string plain)

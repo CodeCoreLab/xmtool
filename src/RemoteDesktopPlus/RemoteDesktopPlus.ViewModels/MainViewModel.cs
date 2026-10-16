@@ -1,14 +1,11 @@
 using System;
-using System.CodeDom.Compiler;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows;
 using CommunityToolkit.Mvvm.ComponentModel;
-using CommunityToolkit.Mvvm.ComponentModel.__Internals;
 using CommunityToolkit.Mvvm.Input;
 using GongSolutions.Wpf.DragDrop;
 using Microsoft.Win32;
@@ -18,7 +15,16 @@ using RemoteDesktopPlus.Views;
 
 namespace RemoteDesktopPlus.ViewModels;
 
-public class MainViewModel : ObservableObject, IDropTarget
+/// <summary>
+/// 主窗口的视图模型。
+/// <para>
+/// 本类由 CommunityToolkit.Mvvm 源生成器补全：属性来自 <c>[ObservableProperty]</c> 字段，
+/// 命令来自 <c>[RelayCommand]</c> 方法，<c>OnXxxChanged</c> 是生成器约定的部分方法钩子。
+/// 反编译版本里那些带 <c>[GeneratedCode]</c> 的手写属性/命令字段已全部删除——
+/// 它们本是生成器产物，保留会与生成器产生 CS0102 重复定义。
+/// </para>
+/// </summary>
+public partial class MainViewModel : ObservableObject, IDropTarget
 {
 	[ObservableProperty]
 	private string host = string.Empty;
@@ -70,411 +76,11 @@ public class MainViewModel : ObservableObject, IDropTarget
 
 	private bool _suppressOptionSave;
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? connectCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? newItemCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? editSelectedCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? saveItemCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? deleteSelectedCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? repairCredentialCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private AsyncRelayCommand? scanOnlineCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? toggleRemoteCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? changePortCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? restorePortCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? setLaunchPasswordCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? setMasterPasswordCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? exportDataCommand;
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	private RelayCommand? importDataCommand;
-
 	public ObservableCollection<ConnectionItem> Connections { get; } = new ObservableCollection<ConnectionItem>();
-
 
 	public IReadOnlyList<string> ResolutionOptions { get; } = new string[10] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "2560*1440", "3840*2160" };
 
-
 	public IReadOnlyList<string> DriveLetters { get; } = BuildDriveLetters();
-
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string Host
-	{
-		get
-		{
-			return host;
-		}
-		[MemberNotNull("host")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(host, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.Host);
-				host = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.Host);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public int Port
-	{
-		get
-		{
-			return port;
-		}
-		set
-		{
-			if (!EqualityComparer<int>.Default.Equals(port, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.Port);
-				port = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.Port);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string UserName
-	{
-		get
-		{
-			return userName;
-		}
-		[MemberNotNull("userName")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(userName, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.UserName);
-				userName = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.UserName);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string Password
-	{
-		get
-		{
-			return password;
-		}
-		[MemberNotNull("password")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(password, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.Password);
-				password = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.Password);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string Resolution
-	{
-		get
-		{
-			return resolution;
-		}
-		[MemberNotNull("resolution")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(resolution, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.Resolution);
-				resolution = value;
-				OnResolutionChanged(value);
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.Resolution);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool RedirectLocalDrive
-	{
-		get
-		{
-			return redirectLocalDrive;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(redirectLocalDrive, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.RedirectLocalDrive);
-				redirectLocalDrive = value;
-				OnRedirectLocalDriveChanged(value);
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.RedirectLocalDrive);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string LocalDriveLetter
-	{
-		get
-		{
-			return localDriveLetter;
-		}
-		[MemberNotNull("localDriveLetter")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(localDriveLetter, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.LocalDriveLetter);
-				localDriveLetter = value;
-				OnLocalDriveLetterChanged(value);
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.LocalDriveLetter);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool ForceConsole
-	{
-		get
-		{
-			return forceConsole;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(forceConsole, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.ForceConsole);
-				forceConsole = value;
-				OnForceConsoleChanged(value);
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.ForceConsole);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool OptionsExpanded
-	{
-		get
-		{
-			return optionsExpanded;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(optionsExpanded, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.OptionsExpanded);
-				optionsExpanded = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.OptionsExpanded);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool IsRemoteEnabled
-	{
-		get
-		{
-			return isRemoteEnabled;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(isRemoteEnabled, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.IsRemoteEnabled);
-				isRemoteEnabled = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.IsRemoteEnabled);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public int CurrentRdpPort
-	{
-		get
-		{
-			return currentRdpPort;
-		}
-		set
-		{
-			if (!EqualityComparer<int>.Default.Equals(currentRdpPort, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.CurrentRdpPort);
-				currentRdpPort = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.CurrentRdpPort);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool IsPortListening
-	{
-		get
-		{
-			return isPortListening;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(isPortListening, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.IsPortListening);
-				isPortListening = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.IsPortListening);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public string NewPort
-	{
-		get
-		{
-			return newPort;
-		}
-		[MemberNotNull("newPort")]
-		set
-		{
-			if (!EqualityComparer<string>.Default.Equals(newPort, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.NewPort);
-				newPort = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.NewPort);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public bool HasMasterPassword
-	{
-		get
-		{
-			return hasMasterPassword;
-		}
-		set
-		{
-			if (!EqualityComparer<bool>.Default.Equals(hasMasterPassword, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.HasMasterPassword);
-				hasMasterPassword = value;
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.HasMasterPassword);
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public ConnectionItem? SelectedConnection
-	{
-		get
-		{
-			return selectedConnection;
-		}
-		set
-		{
-			if (!EqualityComparer<ConnectionItem>.Default.Equals(selectedConnection, value))
-			{
-				OnPropertyChanging(__KnownINotifyPropertyChangingArgs.SelectedConnection);
-				selectedConnection = value;
-				OnSelectedConnectionChanged(value);
-				OnPropertyChanged(__KnownINotifyPropertyChangedArgs.SelectedConnection);
-				ConnectCommand.NotifyCanExecuteChanged();
-				DeleteSelectedCommand.NotifyCanExecuteChanged();
-				EditSelectedCommand.NotifyCanExecuteChanged();
-			}
-		}
-	}
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand ConnectCommand => connectCommand ?? (connectCommand = new RelayCommand(Connect, CanConnect));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand NewItemCommand => newItemCommand ?? (newItemCommand = new RelayCommand(NewItem));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand EditSelectedCommand => editSelectedCommand ?? (editSelectedCommand = new RelayCommand(EditSelected, HasSelected));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand SaveItemCommand => saveItemCommand ?? (saveItemCommand = new RelayCommand(SaveItem));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand DeleteSelectedCommand => deleteSelectedCommand ?? (deleteSelectedCommand = new RelayCommand(DeleteSelected, HasSelected));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand RepairCredentialCommand => repairCredentialCommand ?? (repairCredentialCommand = new RelayCommand(RepairCredential));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IAsyncRelayCommand ScanOnlineCommand => scanOnlineCommand ?? (scanOnlineCommand = new AsyncRelayCommand(ScanOnlineAsync));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand ToggleRemoteCommand => toggleRemoteCommand ?? (toggleRemoteCommand = new RelayCommand(ToggleRemote));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand ChangePortCommand => changePortCommand ?? (changePortCommand = new RelayCommand(ChangePort));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand RestorePortCommand => restorePortCommand ?? (restorePortCommand = new RelayCommand(RestorePort));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand SetLaunchPasswordCommand => setLaunchPasswordCommand ?? (setLaunchPasswordCommand = new RelayCommand(SetLaunchPassword));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand SetMasterPasswordCommand => setMasterPasswordCommand ?? (setMasterPasswordCommand = new RelayCommand(SetMasterPassword));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand ExportDataCommand => exportDataCommand ?? (exportDataCommand = new RelayCommand(ExportData));
-
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.RelayCommandGenerator", "8.3.0.0")]
-	[ExcludeFromCodeCoverage]
-	public IRelayCommand ImportDataCommand => importDataCommand ?? (importDataCommand = new RelayCommand(ImportData));
 
 	private static IReadOnlyList<string> BuildDriveLetters()
 	{
@@ -516,7 +122,7 @@ public class MainViewModel : ObservableObject, IDropTarget
 
 	public MainViewModel()
 	{
-		HasMasterPassword = CryptoService.IsMasterPasswordConfigured();
+		HasMasterPassword = CryptoService.Instance.IsMasterPasswordConfigured();
 		LoadOptions();
 		ReloadConnections();
 		RefreshServerStatus();
@@ -528,21 +134,21 @@ public class MainViewModel : ObservableObject, IDropTarget
 		{
 			_suppressOptionSave = true;
 			DatabaseService instance = DatabaseService.Instance;
-			string setting = instance.GetSetting("options.resolution");
+			string setting = instance.GetSetting(SettingKeys.OptionResolution);
 			if (!string.IsNullOrEmpty(setting) && ResolutionOptions.Contains(setting))
 			{
 				Resolution = setting;
 			}
-			if (bool.TryParse(instance.GetSetting("options.redirect_drive"), out var result))
+			if (bool.TryParse(instance.GetSetting(SettingKeys.OptionRedirectDrive), out var result))
 			{
 				RedirectLocalDrive = result;
 			}
-			string setting2 = instance.GetSetting("options.local_drive_letter");
+			string setting2 = instance.GetSetting(SettingKeys.OptionLocalDriveLetter);
 			if (!string.IsNullOrEmpty(setting2) && DriveLetters.Contains(setting2))
 			{
 				LocalDriveLetter = setting2;
 			}
-			if (bool.TryParse(instance.GetSetting("options.force_console"), out var result2))
+			if (bool.TryParse(instance.GetSetting(SettingKeys.OptionForceConsole), out var result2))
 			{
 				ForceConsole = result2;
 			}
@@ -807,7 +413,7 @@ public class MainViewModel : ObservableObject, IDropTarget
 			Owner = Application.Current.MainWindow
 		}.ShowDialog().GetValueOrDefault())
 		{
-			HasMasterPassword = CryptoService.IsMasterPasswordConfigured();
+			HasMasterPassword = CryptoService.Instance.IsMasterPasswordConfigured();
 			ReloadConnections();
 		}
 	}
@@ -849,7 +455,7 @@ public class MainViewModel : ObservableObject, IDropTarget
 		try
 		{
 			BackupService.Import(openFileDialog.FileName);
-			HasMasterPassword = CryptoService.IsMasterPasswordConfigured();
+			HasMasterPassword = CryptoService.Instance.IsMasterPasswordConfigured();
 			if (HasMasterPassword)
 			{
 				MasterPasswordWindow masterPasswordWindow = new MasterPasswordWindow(MasterPasswordPurpose.Unlock);
@@ -865,7 +471,8 @@ public class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
-	private static (int? w, int? h) ParseResolution(string res)
+	/// <summary>把「1920*1080」「1280x720」「全屏」解析为像素尺寸；「全屏」或非法值返回 (null, null)。</summary>
+	public static (int? w, int? h) ParseResolution(string res)
 	{
 		if (string.IsNullOrEmpty(res) || res == "全屏")
 		{
@@ -907,44 +514,39 @@ public class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	private void OnResolutionChanged(string value)
+	partial void OnResolutionChanged(string value)
 	{
 		if (!_suppressOptionSave)
 		{
-			DatabaseService.Instance.SetSetting("options.resolution", value ?? string.Empty);
+			DatabaseService.Instance.SetSetting(SettingKeys.OptionResolution, value ?? string.Empty);
 		}
 	}
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	private void OnRedirectLocalDriveChanged(bool value)
+	partial void OnRedirectLocalDriveChanged(bool value)
 	{
 		if (!_suppressOptionSave)
 		{
-			DatabaseService.Instance.SetSetting("options.redirect_drive", value.ToString());
+			DatabaseService.Instance.SetSetting(SettingKeys.OptionRedirectDrive, value.ToString());
 		}
 	}
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	private void OnLocalDriveLetterChanged(string value)
+	partial void OnLocalDriveLetterChanged(string value)
 	{
 		if (!_suppressOptionSave)
 		{
-			DatabaseService.Instance.SetSetting("options.local_drive_letter", value ?? string.Empty);
+			DatabaseService.Instance.SetSetting(SettingKeys.OptionLocalDriveLetter, value ?? string.Empty);
 		}
 	}
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	private void OnForceConsoleChanged(bool value)
+	partial void OnForceConsoleChanged(bool value)
 	{
 		if (!_suppressOptionSave)
 		{
-			DatabaseService.Instance.SetSetting("options.force_console", value.ToString());
+			DatabaseService.Instance.SetSetting(SettingKeys.OptionForceConsole, value.ToString());
 		}
 	}
 
-	[GeneratedCode("CommunityToolkit.Mvvm.SourceGenerators.ObservablePropertyGenerator", "8.3.0.0")]
-	private void OnSelectedConnectionChanged(ConnectionItem? value)
+	partial void OnSelectedConnectionChanged(ConnectionItem? value)
 	{
 		if (value != null)
 		{

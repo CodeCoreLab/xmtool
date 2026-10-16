@@ -18,7 +18,7 @@ public partial class MasterPasswordWindow : Window
 	{
 		InitializeComponent();
 		Purpose = purpose;
-		bool configured = CryptoService.IsMasterPasswordConfigured();
+		bool configured = CryptoService.Instance.IsMasterPasswordConfigured();
 		ShowOldPassword = configured ? Visibility.Visible : Visibility.Collapsed;
 		TitleText = purpose switch
 		{
@@ -58,7 +58,7 @@ public partial class MasterPasswordWindow : Window
 			}
 			return;
 		}
-		if (CryptoService.IsMasterPasswordConfigured() && !CryptoService.Instance.HasMasterKey && !CryptoService.Instance.Unlock(OldPwd.Password))
+		if (CryptoService.Instance.IsMasterPasswordConfigured() && !CryptoService.Instance.HasMasterKey && !CryptoService.Instance.Unlock(OldPwd.Password))
 		{
 			MessageBox.Show("原主密码不正确。", "错误", MessageBoxButton.OK, MessageBoxImage.Hand);
 			return;

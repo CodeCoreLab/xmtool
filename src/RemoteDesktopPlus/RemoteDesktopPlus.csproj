@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <AssemblyName>远程桌面连接++</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
@@ -7,7 +7,7 @@
     <UseWindowsForms>True</UseWindowsForms>
     <TargetFramework>net8.0-windows</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
-    <Nullable>disable</Nullable>
+    <Nullable>annotations</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
   </PropertyGroup>
   <PropertyGroup>
@@ -21,6 +21,10 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="app.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <Analyzer Include="analyzers\CommunityToolkit.Mvvm.SourceGenerators.dll" />
+    <Analyzer Include="analyzers\CommunityToolkit.Mvvm.CodeFixers.dll" />
   </ItemGroup>
   <ItemGroup>
     <Reference Include="CommunityToolkit.Mvvm">

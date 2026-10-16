@@ -60,7 +60,7 @@ public partial class App : Application
 			Shutdown();
 			return;
 		}
-		if (CryptoService.IsMasterPasswordConfigured() && !CryptoService.Instance.HasMasterKey)
+		if (CryptoService.Instance.IsMasterPasswordConfigured() && !CryptoService.Instance.HasMasterKey)
 		{
 			new MasterPasswordWindow(MasterPasswordPurpose.Unlock).ShowDialog();
 		}

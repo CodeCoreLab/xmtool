@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
@@ -5,52 +7,56 @@ using System.Threading.Tasks;
 
 namespace RemoteDesktopPlus.Services;
 
+/// <summary>
+/// 生成 .rdp 文件并拉起远程桌面客户端。
+/// <para>
+/// 安全要点（原实现缺陷已修）：密码**不再**经 <c>cmdkey.exe /pass:&lt;明文&gt;</c> 传入，
+/// 而是通过 <see cref="IRdpBackend.StoreCredential"/> 写入系统凭据存储。
+/// 原因是命令行参数对任何进程可见（Win32_Process.CommandLine / 任务管理器），
+/// 而 CredWriteW 的 CredentialBlob 不进进程命令行。
+/// </para>
+/// </summary>
 public static class RdpLauncher
 {
 	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole);
 
+	private static IRdpBackend _backend = WindowsRdpBackend.Instance;
+
+	/// <summary>可替换后端（测试注入用）。生产默认走 Windows 实现。</summary>
+	public static IRdpBackend Backend
+	{
+		get
+		{
+			return _backend;
+		}
+		set
+		{
+			_backend = value ?? throw new ArgumentNullException(nameof(value));
+		}
+	}
+
 	public static void Launch(RdpOptions opt)
 	{
-		RdpOptions opt2 = opt;
-		string target = "TERMSRV/" + opt2.Host;
-		bool hasCredential = !string.IsNullOrEmpty(opt2.UserName);
+		string target = WindowsRdpBackend.BuildTarget(opt.Host);
+		bool hasCredential = !string.IsNullOrEmpty(opt.UserName);
 		if (hasCredential)
 		{
-			RunCmdkeyAdd(target, opt2.UserName, opt2.Password);
+			_backend.StoreCredential(target, opt.UserName, opt.Password);
 		}
-		string rdpPath = WriteRdpFile(opt2);
-		Process.Start(new ProcessStartInfo
-		{
-			FileName = "mstsc.exe",
-			UseShellExecute = true,
-			ArgumentList = { rdpPath }
-		});
+
+		string rdpPath = WriteRdpFile(opt);
+		_backend.StartClient(rdpPath);
+
+		// mstsc 读取 .rdp 与凭据是异步的，故延迟清理临时文件与一次性凭据。
 		Task.Run(async delegate
 		{
 			try
 			{
 				await Task.Delay(5000).ConfigureAwait(continueOnCapturedContext: false);
-				try
-				{
-					if (File.Exists(rdpPath))
-					{
-						File.Delete(rdpPath);
-					}
-				}
-				catch
-				{
-				}
+				TryDelete(rdpPath);
 				if (hasCredential)
 				{
-					try
-					{
-						ClearCredential(opt2.Host);
-						return;
-					}
-					catch
-					{
-						return;
-					}
+					TryDeleteCredential(opt.Host);
 				}
 			}
 			catch
@@ -61,44 +67,21 @@ public static class RdpLauncher
 
 	public static void ClearCredential(string host)
 	{
-		string text = "TERMSRV/" + host;
-		ProcessStartInfo processStartInfo = new ProcessStartInfo
-		{
-			FileName = "cmdkey.exe",
-			UseShellExecute = false,
-			CreateNoWindow = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true
-		};
-		processStartInfo.ArgumentList.Add("/delete:" + text);
-		try
-		{
-			using Process process = Process.Start(processStartInfo);
-			process?.WaitForExit(3000);
-		}
-		catch
-		{
-		}
+		TryDeleteCredential(host);
 	}
 
 	public static void CleanupTempFiles()
 	{
 		try
 		{
-			string path = Path.Combine(Path.GetTempPath(), "RemoteDesktopPlus");
-			if (!Directory.Exists(path))
+			string dir = GetTempDirectory();
+			if (!Directory.Exists(dir))
 			{
 				return;
 			}
-			foreach (string item in Directory.EnumerateFiles(path, "*.rdp"))
+			foreach (string file in Directory.EnumerateFiles(dir, "*.rdp"))
 			{
-				try
-				{
-					File.Delete(item);
-				}
-				catch
-				{
-				}
+				TryDelete(file);
 			}
 		}
 		catch
@@ -106,93 +89,81 @@ public static class RdpLauncher
 		}
 	}
 
-	private static void RunCmdkeyAdd(string target, string user, string password)
+	/// <summary>临时 .rdp 所在目录：%TEMP%\RemoteDesktopPlus。</summary>
+	public static string GetTempDirectory()
 	{
-		ProcessStartInfo processStartInfo = new ProcessStartInfo
-		{
-			FileName = "cmdkey.exe",
-			UseShellExecute = false,
-			CreateNoWindow = true,
-			RedirectStandardOutput = true,
-			RedirectStandardError = true
-		};
-		processStartInfo.ArgumentList.Add("/generic:" + target);
-		processStartInfo.ArgumentList.Add("/user:" + user);
-		processStartInfo.ArgumentList.Add("/pass:" + password);
-		try
-		{
-			using Process process = Process.Start(processStartInfo);
-			process?.WaitForExit(3000);
-		}
-		catch
-		{
-		}
+		return Path.Combine(Path.GetTempPath(), "RemoteDesktopPlus");
 	}
 
-	private static string WriteRdpFile(RdpOptions opt)
+	/// <summary>
+	/// 生成 .rdp 文件内容。公开以便单元测试直接断言各分支渲染结果，无需落盘。
+	/// </summary>
+	public static string BuildRdpContent(RdpOptions opt)
 	{
-		StringBuilder stringBuilder = new StringBuilder();
-		StringBuilder stringBuilder2 = stringBuilder;
-		StringBuilder stringBuilder3 = stringBuilder2;
-		StringBuilder.AppendInterpolatedStringHandler handler = new StringBuilder.AppendInterpolatedStringHandler(16, 2, stringBuilder2);
-		handler.AppendLiteral("full address:s:");
-		handler.AppendFormatted(opt.Host);
-		handler.AppendLiteral(":");
-		handler.AppendFormatted(opt.Port);
-		stringBuilder3.AppendLine(ref handler);
-		stringBuilder2 = stringBuilder;
-		StringBuilder stringBuilder4 = stringBuilder2;
-		handler = new StringBuilder.AppendInterpolatedStringHandler(11, 1, stringBuilder2);
-		handler.AppendLiteral("username:s:");
-		handler.AppendFormatted(opt.UserName);
-		stringBuilder4.AppendLine(ref handler);
-		stringBuilder.AppendLine("prompt for credentials:i:0");
-		stringBuilder.AppendLine("authentication level:i:0");
-		stringBuilder.AppendLine("enablecredsspsupport:i:1");
-		int? width = opt.Width;
-		if (width.HasValue && width.GetValueOrDefault() > 0)
+		StringBuilder sb = new StringBuilder();
+		sb.AppendLine($"full address:s:{opt.Host}:{opt.Port}");
+		sb.AppendLine($"username:s:{opt.UserName}");
+		sb.AppendLine("prompt for credentials:i:0");
+		sb.AppendLine("authentication level:i:0");
+		sb.AppendLine("enablecredsspsupport:i:1");
+
+		bool hasSize = opt.Width.HasValue && opt.Width.GetValueOrDefault() > 0
+			&& opt.Height.HasValue && opt.Height.GetValueOrDefault() > 0;
+		if (hasSize)
 		{
-			width = opt.Height;
-			if (width.HasValue && width.GetValueOrDefault() > 0)
-			{
-				stringBuilder.AppendLine("screen mode id:i:1");
-				stringBuilder2 = stringBuilder;
-				StringBuilder stringBuilder5 = stringBuilder2;
-				handler = new StringBuilder.AppendInterpolatedStringHandler(15, 1, stringBuilder2);
-				handler.AppendLiteral("desktopwidth:i:");
-				handler.AppendFormatted(opt.Width);
-				stringBuilder5.AppendLine(ref handler);
-				stringBuilder2 = stringBuilder;
-				StringBuilder stringBuilder6 = stringBuilder2;
-				handler = new StringBuilder.AppendInterpolatedStringHandler(16, 1, stringBuilder2);
-				handler.AppendLiteral("desktopheight:i:");
-				handler.AppendFormatted(opt.Height);
-				stringBuilder6.AppendLine(ref handler);
-				goto IL_0155;
-			}
+			sb.AppendLine("screen mode id:i:1");
+			sb.AppendLine($"desktopwidth:i:{opt.Width.GetValueOrDefault()}");
+			sb.AppendLine($"desktopheight:i:{opt.Height.GetValueOrDefault()}");
 		}
-		stringBuilder.AppendLine("screen mode id:i:2");
-		goto IL_0155;
-		IL_0155:
+		else
+		{
+			sb.AppendLine("screen mode id:i:2");
+		}
+
 		if (opt.RedirectLocalDrive && !string.IsNullOrEmpty(opt.LocalDriveLetter))
 		{
-			stringBuilder2 = stringBuilder;
-			StringBuilder stringBuilder7 = stringBuilder2;
-			handler = new StringBuilder.AppendInterpolatedStringHandler(20, 1, stringBuilder2);
-			handler.AppendLiteral("drivestoredirect:s:");
-			handler.AppendFormatted(opt.LocalDriveLetter);
-			handler.AppendLiteral(":");
-			stringBuilder7.AppendLine(ref handler);
+			sb.AppendLine($"drivestoredirect:s:{opt.LocalDriveLetter}:");
 		}
 		if (opt.ForceConsole)
 		{
-			stringBuilder.AppendLine("connect to console:i:1");
+			sb.AppendLine("connect to console:i:1");
 		}
-		string text = Path.Combine(Path.GetTempPath(), "RemoteDesktopPlus");
-		Directory.CreateDirectory(text);
-		string value = string.Join("_", opt.Host.Split(Path.GetInvalidFileNameChars()));
-		string text2 = Path.Combine(text, $"{value}_{opt.Port}.rdp");
-		File.WriteAllText(text2, stringBuilder.ToString(), Encoding.Unicode);
-		return text2;
+		return sb.ToString();
+	}
+
+	/// <summary>生成并落盘 .rdp 文件（UTF-16LE），返回绝对路径。</summary>
+	public static string WriteRdpFile(RdpOptions opt)
+	{
+		string dir = GetTempDirectory();
+		Directory.CreateDirectory(dir);
+		string safeHost = string.Join("_", opt.Host.Split(Path.GetInvalidFileNameChars()));
+		string path = Path.Combine(dir, $"{safeHost}_{opt.Port}.rdp");
+		File.WriteAllText(path, BuildRdpContent(opt), Encoding.Unicode);
+		return path;
+	}
+
+	private static void TryDelete(string path)
+	{
+		try
+		{
+			if (File.Exists(path))
+			{
+				File.Delete(path);
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	private static void TryDeleteCredential(string host)
+	{
+		try
+		{
+			_backend.DeleteCredential(WindowsRdpBackend.BuildTarget(host));
+		}
+		catch
+		{
+		}
 	}
 }
