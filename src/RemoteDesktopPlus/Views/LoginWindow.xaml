@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Window x:Class="RemoteDesktopPlus.Views.LoginWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="小马远程桌面  " Width="380" SizeToContent="Height" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Background="{StaticResource WarmCanvasBrush}" Icon="/app.ico" xmlns:views="clr-namespace:RemoteDesktopPlus.Views;assembly=远程桌面连接++">
+<Window x:Class="RemoteDesktopPlus.Views.LoginWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" Title="小马远程桌面" Width="380" SizeToContent="Height" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Background="{StaticResource WarmCanvasBrush}" Icon="/app.ico" xmlns:views="clr-namespace:RemoteDesktopPlus.Views;assembly=远程桌面连接++">
   <Grid Margin="32">
     <Grid.RowDefinitions>
       <RowDefinition Height="Auto" />

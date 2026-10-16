@@ -18,7 +18,7 @@
         </Grid>
       </Border>
       <StackPanel VerticalAlignment="Center">
-        <TextBlock Text="小马远程桌面  " Style="{StaticResource DisplayTitle}" FontSize="20" />
+        <TextBlock Text="小马远程桌面" Style="{StaticResource DisplayTitle}" FontSize="20" />
         <TextBlock Text="Remote Desktop Plus" FontSize="11" FontWeight="Medium" Foreground="{StaticResource InkSubtleBrush}" Margin="0,2,0,0" />
       </StackPanel>
     </StackPanel>
@@ -42,9 +42,9 @@
         <TextBlock Grid.Row="2" Grid.Column="0" Text="技术" Style="{StaticResource FieldLabel}" />
         <TextBlock Grid.Row="2" Grid.Column="1" Text=".NET 8 · WPF" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="4" Grid.Column="0" Text="作者" Style="{StaticResource FieldLabel}" />
-        <TextBlock Grid.Row="4" Grid.Column="1" Text="马欣 " Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="4" Grid.Column="1" Text="马欣" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="6" Grid.Column="0" Text="版权" Style="{StaticResource FieldLabel}" />
-        <TextBlock Grid.Row="6" Grid.Column="1" Text="© 2026 MIT开源协议     " Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="6" Grid.Column="1" Text="© 2026 马欣 · MIT License" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
       </Grid>
     </Border>
     <TextBlock Grid.Row="2" Margin="2,16,2,0" Style="{StaticResource HelperText}" Text="一个轻量的远程桌面连接管理工具，支持连接记录、凭证加密保存、批量在线检测与本机远程桌面端口管理。" />
