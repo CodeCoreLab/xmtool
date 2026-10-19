@@ -27,19 +27,19 @@
 
 ## 工程结构
 
+> **单文件源码形态**：全部应用层 C# 合并在 `RemoteDesktopPlus.All.cs`（39 个原始文件机械合并，每源文件对应一个块级 namespace 区段，语义与多文件形态一致）。历史多文件版本备份于 `../backup_pre_singlefile_20261019/`。
+
 ```
-RemoteDesktopPlus\          App 组合根、单实例、命名管道唤醒
-RemoteDesktopPlus.Models\   数据模型与跨层 DTO
-RemoteDesktopPlus.Services\ 服务层（数据库、加密、RDP 后端、探活、备份、托盘）
-RemoteDesktopPlus.ViewModels\ 视图模型（MainViewModel 按职责分 partial）
-RemoteDesktopPlus.Views\    视图与 XAML（.cs 为 BAML 载入壳）
-RemoteDesktopPlus.Converters\ 值转换器
+RemoteDesktopPlus.All.cs    全量应用源码（Models → Services → ViewModels → Views → Converters → App 组合根）
+App.xaml                    应用资源装配（WPF 编译器要求独立存在）
+Views\*.xaml                视图声明（x:Class 指向单文件内的 partial 窗口类）
 Styles\                     设计令牌（Colors.xaml）与控件样式（Controls.xaml）
-tests\RemoteDesktopPlus.Tests\ xUnit 单元测试
+Properties\AssemblyInfo.cs  程序集特性（仅能在全局命名空间）
+tests\RemoteDesktopPlus.Tests\ xUnit 单元测试（独立工程）
 libs\                       随仓库分发的第三方依赖
 ```
 
-分层是单向的：`Models ← Services ← ViewModels`，`Views → ViewModels`；ViewModel 不引用任何 View 类型（对话框经 `IDialogService` 注入）。
+分层是单向的：`Models ← Services ← ViewModels`，`Views → ViewModels`；ViewModel 不引用任何 View 类型（对话框经 `IDialogService` 注入）。单文件内按区段注释（`区段 NN / 39`）导航，扩展新功能时在对应层区段内追加类型即可。
 
 ## 构建与运行
 
@@ -52,9 +52,12 @@ dotnet build RemoteDesktopPlus.csproj -c Release
 # 运行测试
 dotnet test tests\RemoteDesktopPlus.Tests\RemoteDesktopPlus.Tests.csproj -c Release
 
-# 发布（RID 专用，与既有发布包布局一致）
-dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained false -o publish
+# 发布（单文件 exe，框架依赖 win-x64）
+dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained false `
+  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish_final
 ```
+
+发布产物为**单个 `远程桌面连接++.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
 
 ## 数据与凭据
 

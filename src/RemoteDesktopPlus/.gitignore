@@ -20,3 +20,10 @@ _tools/
 ## OS noise
 Thumbs.db
 desktop.ini
+
+## Publish artifacts (rebuilt from source, not versioned)
+publish_final/
+publish_standalone/
+publish/
+*.import-failed
+data.db.bak
