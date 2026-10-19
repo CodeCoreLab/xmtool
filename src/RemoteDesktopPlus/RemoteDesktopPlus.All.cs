@@ -2009,7 +2009,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 
 	public ObservableCollection<ConnectionItem> Connections { get; } = new ObservableCollection<ConnectionItem>();
 
-	public IReadOnlyList<string> ResolutionOptions { get; } = new string[10] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "2560*1440", "3840*2160" };
+	public IReadOnlyList<string> ResolutionOptions { get; } = new string[11] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
 
 	public IReadOnlyList<string> DriveLetters { get; } = BuildDriveLetters();
 

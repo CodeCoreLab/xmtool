@@ -41,7 +41,7 @@ public class MainViewModelTests
 		Assert.Empty(vm.Connections);
 		Assert.Equal(3389, vm.Port);
 		Assert.Equal("1920*1080", vm.Resolution);
-		Assert.Equal(10, vm.ResolutionOptions.Count);
+		Assert.Equal(11, vm.ResolutionOptions.Count);
 		Assert.True(vm.OptionsExpanded);
 	}
 
