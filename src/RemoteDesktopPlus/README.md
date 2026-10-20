@@ -1,8 +1,8 @@
-# 远程桌面连接++
+# 小马远程桌面
 
 轻量的 Windows 远程桌面连接管理工具：集中维护连接记录、加密保存凭据、批量在线检测、本机远程桌面端口管理。
 
-> 工程代号 `RemoteDesktopPlus`，界面品牌名「小马远程桌面」，产物为 `远程桌面连接++.exe`。
+> 工程代号 `RemoteDesktopPlus`，产品名「小马远程桌面」，产物为 `小马远程桌面.exe`。
 
 ## 功能
 
@@ -57,7 +57,7 @@ dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained f
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish_final
 ```
 
-发布产物为**单个 `远程桌面连接++.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
+发布产物为**单个 `小马远程桌面.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
 
 ## 数据与凭据
 

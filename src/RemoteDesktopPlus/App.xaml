@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Application x:Class="RemoteDesktopPlus.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnExplicitShutdown" xmlns:remotedesktopplus="clr-namespace:RemoteDesktopPlus;assembly=远程桌面连接++">
+<Application x:Class="RemoteDesktopPlus.App" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" ShutdownMode="OnExplicitShutdown" xmlns:remotedesktopplus="clr-namespace:RemoteDesktopPlus;assembly=小马远程桌面">
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
