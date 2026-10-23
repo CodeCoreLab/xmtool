@@ -139,6 +139,26 @@ public sealed class ConnectionFormResult : INotifyPropertyChanged
 	/// <summary>明文密码。仅短暂存在于内存，落库前由 CryptoService 加密。</summary>
 	public string Password { get; set; } = string.Empty;
 
+	/// <summary>
+	/// 分组名（空 = 未分组）。用于按组筛选，以及按组覆盖连接配置
+	/// （分辨率/盘符/剪贴板），见 <see cref="Services.GroupOptionStore"/>。
+	/// </summary>
+	public string GroupName
+	{
+		get => _groupName;
+		set
+		{
+			if (_groupName == value)
+			{
+				return;
+			}
+			_groupName = value;
+			Notify();
+		}
+	}
+
+	private string _groupName = string.Empty;
+
 	public event PropertyChangedEventHandler? PropertyChanged;
 
 	private void Notify([CallerMemberName] string? name = null)
@@ -153,6 +173,7 @@ public sealed class ConnectionFormResult : INotifyPropertyChanged
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Models
 {
+using System;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 /// <summary>
@@ -188,8 +209,48 @@ public partial class ConnectionItem : ObservableObject
 	[ObservableProperty]
 	private string groupName = string.Empty;
 
-	/// <summary>最后成功连接时间（Unix 秒，0 = 从未连接）。</summary>
-	public long LastConnectedAt { get; set; }
+	/// <summary>
+	/// 最后成功连接时间（Unix 秒，0 = 从未连接）。
+	/// 用 [ObservableProperty] 而非普通属性：连接成功回写后要立刻让
+	/// <see cref="LastConnectedText"/> 与排序一起刷新，否则界面停在旧值。
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(LastConnectedText))]
+	private long lastConnectedAt;
+
+	/// <summary>
+	/// 「最近连接」列的显示文本。由 <see cref="LastConnectedAt"/> 换算成相对时间，
+	/// 比原始时间戳更易读（列表里没人愿意心算 Unix 秒）。
+	/// </summary>
+	public string LastConnectedText
+	{
+		get
+		{
+			if (LastConnectedAt <= 0)
+			{
+				return "从未";
+			}
+			DateTimeOffset then = DateTimeOffset.FromUnixTimeSeconds(LastConnectedAt).ToLocalTime();
+			TimeSpan span = DateTimeOffset.Now - then;
+			if (span.TotalSeconds < 60)
+			{
+				return "刚刚";
+			}
+			if (span.TotalMinutes < 60)
+			{
+				return $"{(int)span.TotalMinutes} 分钟前";
+			}
+			if (span.TotalHours < 24)
+			{
+				return $"{(int)span.TotalHours} 小时前";
+			}
+			if (span.TotalDays < 30)
+			{
+				return $"{(int)span.TotalDays} 天前";
+			}
+			return then.ToString("yyyy-MM-dd");
+		}
+	}
 
 	/// <summary>协议类型（v2 schema 扩展列），当前仅 rdp；为协议扩展（E5）预留。</summary>
 	public string Protocol { get; set; } = "rdp";
@@ -228,6 +289,16 @@ public static class SettingKeys
 	public const string OptionForceConsole = "options.force_console";
 
 	public const string OptionRedirectClipboard = "options.redirect_clipboard";
+
+	/// <summary>
+	/// 列表排序方式：`manual`（拖拽顺序，默认）或 `recent`（最近连接优先）。
+	/// 两者互斥 —— 按最近连接排时拖拽改的 SortOrder 不参与显示，
+	/// 否则用户会看到「拖了但没动」。
+	/// </summary>
+	public const string OptionSortMode = "options.sort_mode";
+
+	/// <summary>分组级配置覆盖表（JSON），见 <see cref="GroupOptionStore"/>。</summary>
+	public const string OptionGroupOverrides = "options.group_overrides";
 }
 }
 
@@ -652,6 +723,142 @@ public sealed class DatabaseService
 	public void ReinitializeAfterImport()
 	{
 		Initialize();
+	}
+}
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// 追加区段：RemoteDesktopPlus.Services/GroupOptionStore.cs  →  namespace RemoteDesktopPlus.Services
+// ════════════════════════════════════════════════════════════════════════
+namespace RemoteDesktopPlus.Services
+{
+using System;
+using System.Collections.Generic;
+using System.Text.Json;
+
+/// <summary>
+/// 分组级连接配置覆盖。
+/// <para>
+/// 解决的问题：原先分辨率/盘符/剪贴板是**全局一份**，同时连「客户 A」（要 1920*1080、只共享 C 盘）
+/// 和「内网测试」（要全屏、共享全部盘）时必须反复改全局配置，互相干扰。
+/// </para>
+/// <para>
+/// 设计：只存**与全局不同的差异项**（null 表示继承全局），避免把全局值复制一份导致
+/// 「改了全局但组内还是旧值」这类隐蔽不一致。
+/// </para>
+/// </summary>
+public sealed class GroupOptions
+{
+	/// <summary>为空表示继承全局设置。</summary>
+	public string? Resolution { get; set; }
+
+	/// <summary>为空表示继承全局设置。</summary>
+	public bool? RedirectClipboard { get; set; }
+
+	/// <summary>为空表示继承全局设置。</summary>
+	public bool? RedirectLocalDrive { get; set; }
+
+	/// <summary>为空表示继承全局；`*` 表示全部盘符。</summary>
+	public string? LocalDriveLetter { get; set; }
+}
+
+/// <summary>
+/// 分组配置的读写门面：以 JSON 存在 Settings 表的一个键里。
+/// 用单个 JSON 键而非新建表 —— 配置量小、读写整块、无需迁移。
+/// <para>
+/// 刻意**不做内存缓存**：配置是单个小 JSON，每次读库开销可忽略；
+/// 而缓存会引入「另一个实例改了配置、本实例还读旧值」的跨实例不一致
+/// （实测导致分组覆盖不生效，且刷新时机难以判定）。
+/// </para>
+/// </summary>
+public sealed class GroupOptionStore
+{
+	private readonly DatabaseService _db;
+
+	public GroupOptionStore(DatabaseService db)
+	{
+		_db = db ?? throw new ArgumentNullException(nameof(db));
+	}
+
+	/// <summary>读取指定分组的覆盖配置；无配置返回 null（全继承全局）。</summary>
+	public GroupOptions? Get(string? groupName)
+	{
+		if (string.IsNullOrWhiteSpace(groupName))
+		{
+			return null;
+		}
+		Dictionary<string, GroupOptions> all = Load();
+		return all.TryGetValue(groupName.Trim(), out GroupOptions? opt) ? opt : null;
+	}
+
+	/// <summary>
+	/// 写入/清除指定分组的覆盖。全部字段为空即视为「无覆盖」并移除该组条目，
+	/// 避免留下一个空壳条目让人误以为配过。
+	/// </summary>
+	public void Set(string? groupName, GroupOptions? options)
+	{
+		if (string.IsNullOrWhiteSpace(groupName))
+		{
+			return;
+		}
+		string key = groupName.Trim();
+		Dictionary<string, GroupOptions> all = Load();
+		if (options == null || IsAllInherited(options))
+		{
+			if (all.Remove(key))
+			{
+				Save(all);
+			}
+			return;
+		}
+		all[key] = options;
+		Save(all);
+	}
+
+	/// <summary>列出所有已配置覆盖的分组名（用于 UI 提示）。</summary>
+	public IReadOnlyList<string> GroupNames()
+	{
+		return new List<string>(Load().Keys);
+	}
+
+	private static bool IsAllInherited(GroupOptions o)
+	{
+		return o.Resolution == null
+			&& o.RedirectClipboard == null
+			&& o.RedirectLocalDrive == null
+			&& o.LocalDriveLetter == null;
+	}
+
+	private Dictionary<string, GroupOptions> Load()
+	{
+		string raw = _db.GetSetting(SettingKeys.OptionGroupOverrides);
+		if (string.IsNullOrWhiteSpace(raw))
+		{
+			return new Dictionary<string, GroupOptions>(StringComparer.OrdinalIgnoreCase);
+		}
+		try
+		{
+			Dictionary<string, GroupOptions>? parsed = JsonSerializer
+				.Deserialize<Dictionary<string, GroupOptions>>(raw);
+			if (parsed == null)
+			{
+				return new Dictionary<string, GroupOptions>(StringComparer.OrdinalIgnoreCase);
+			}
+			// 反序列化出来的字典比较器默认是 Ordinal，统一改成忽略大小写，
+			// 避免「TEST」与「test」被当成两个组。
+			return new Dictionary<string, GroupOptions>(parsed, StringComparer.OrdinalIgnoreCase);
+		}
+		catch (JsonException ex)
+		{
+			// 配置损坏不该让整个程序起不来：丢弃坏配置并按空处理，同时记日志便于排查。
+			Log.Warn("分组配置 JSON 解析失败，按空配置处理: " + ex.Message);
+			return new Dictionary<string, GroupOptions>(StringComparer.OrdinalIgnoreCase);
+		}
+	}
+
+	private void Save(Dictionary<string, GroupOptions> all)
+	{
+		_db.SetSetting(SettingKeys.OptionGroupOverrides, JsonSerializer.Serialize(all));
 	}
 }
 }
@@ -1523,6 +1730,13 @@ public interface IDialogService
 	/// <summary>选择导出目标文件；用户取消返回 null。</summary>
 	string? PickExportTarget(string suggestedFileName);
 
+	/// <summary>
+	/// 选择导出「单条连接」的目标文件（.rdp）；用户取消返回 null。
+	/// 与 <see cref="PickExportTarget"/> 分开是因为两者扩展名与过滤器不同，
+	/// 混用会让用户拿到一个后缀为 .db 的 rdp 文件。
+	/// </summary>
+	string? PickRdpExportTarget(string suggestedFileName);
+
 	/// <summary>选择导入来源文件；用户取消返回 null。</summary>
 	string? PickImportSource();
 }
@@ -1966,8 +2180,11 @@ namespace RemoteDesktopPlus.ViewModels
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text;
+using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GongSolutions.Wpf.DragDrop;
 using RemoteDesktopPlus.Models;
@@ -2035,6 +2252,20 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private bool optionsExpanded = true;
 
+	/// <summary>
+	/// 列表是否按最近连接排序（false = 按手工拖拽的 SortOrder）。
+	/// 切换时立即重排并持久化，下次启动沿用。
+	/// </summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanReorderManually))]
+	private bool sortByRecent;
+
+	/// <summary>
+	/// 是否允许手工拖拽排序（= 未按最近连接排序）。
+	/// 供 UI 绑定 DragSource/DropTarget 开关，避免在自动排序时给出可拖的假象。
+	/// </summary>
+	public bool CanReorderManually => !SortByRecent;
+
 	[ObservableProperty]
 	private bool isRemoteEnabled;
 
@@ -2070,12 +2301,92 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 
 	private readonly IRdpLauncher _launcher;
 
+	/// <summary>分组级配置覆盖（分辨率/盘符/剪贴板）。</summary>
+	private readonly GroupOptionStore _groupOptions;
+
 	/// <summary>读选项期间抑制写回，避免「加载即保存」的自我覆盖。</summary>
 	private bool _suppressOptionSave;
 
 	public ObservableCollection<ConnectionItem> Connections { get; } = new ObservableCollection<ConnectionItem>();
 
 	public IReadOnlyList<string> ResolutionOptions { get; } = new string[11] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
+
+	/// <summary>「全部分组」在筛选下拉里的显示值。</summary>
+	public const string AllGroupsDisplayName = "全部分组";
+
+	/// <summary>
+	/// 分组筛选下拉的可选项。来源 = 现有连接里出现过的分组名 ∪ 已配置覆盖的分组名，
+	/// 首项固定「全部分组」。用可观察集合以便新增/改名后自动刷新。
+	/// </summary>
+	public ObservableCollection<string> GroupFilterOptions { get; } = new ObservableCollection<string>();
+
+	[ObservableProperty]
+	private string selectedGroupFilter = AllGroupsDisplayName;
+
+	partial void OnSelectedGroupFilterChanged(string value)
+	{
+		ApplyGroupFilter();
+	}
+
+	/// <summary>按当前选中的分组重建筛选下拉（保持原选中项不丢）。</summary>
+	public void RefreshGroupNames()
+	{
+		List<string> names = Connections
+			.Select(c => c.GroupName)
+			.Where(g => !string.IsNullOrWhiteSpace(g))
+			.Distinct(StringComparer.OrdinalIgnoreCase)
+			.OrderBy(g => g, StringComparer.OrdinalIgnoreCase)
+			.ToList();
+		// 已配置覆盖但当前无连接的分组也要能筛到，否则配了看不到。
+		foreach (string extra in _groupOptions.GroupNames())
+		{
+			if (!names.Contains(extra, StringComparer.OrdinalIgnoreCase))
+			{
+				names.Add(extra);
+			}
+		}
+		names.Sort(StringComparer.OrdinalIgnoreCase);
+
+		GroupFilterOptions.Clear();
+		GroupFilterOptions.Add(AllGroupsDisplayName);
+		foreach (string n in names)
+		{
+			GroupFilterOptions.Add(n);
+		}
+		// 原选项消失（该组被改空或删光）时回落到「全部分组」，避免下拉显示空白。
+		if (!GroupFilterOptions.Contains(SelectedGroupFilter))
+		{
+			SelectedGroupFilter = AllGroupsDisplayName;
+		}
+	}
+
+	/// <summary>
+	/// 视图层筛选器。用 ICollectionView 而非重建 Connections：
+	/// 后者会打断拖拽排序与选中态，且每次切换筛选都要重读数据库。
+	/// </summary>
+	private ICollectionView? _connectionsView;
+
+	/// <summary>由视图在 Loaded 时注入 DataGrid 的默认视图，便于施加筛选。</summary>
+	public void AttachConnectionsView(ICollectionView view)
+	{
+		_connectionsView = view;
+		ApplyGroupFilter();
+	}
+
+	/// <summary>按 <see cref="SelectedGroupFilter"/> 过滤列表可见项。</summary>
+	private void ApplyGroupFilter()
+	{
+		if (_connectionsView == null)
+		{
+			return;
+		}
+		string filter = SelectedGroupFilter;
+		bool all = string.IsNullOrEmpty(filter) || AllGroupsDisplayName.Equals(filter, StringComparison.Ordinal);
+		_connectionsView.Filter = all
+			? null
+			: new Predicate<object>(o => o is ConnectionItem c
+				&& string.Equals(c.GroupName ?? string.Empty, filter, StringComparison.OrdinalIgnoreCase));
+	}
 
 	/// <summary>
 	/// 盘符下拉选项。第一项是「全部盘符」，映射到 RDP 的 `*` 取值；
@@ -2148,6 +2459,9 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		_crypto = crypto ?? throw new ArgumentNullException(nameof(crypto));
 		_dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
 		_launcher = launcher ?? WindowsRdpLauncher.Instance;
+		// 分组配置门面直接绑本 VM 的库连接：它只是 Settings 表上一个 JSON 键的读写封装，
+		// 不引入新依赖，也让测试用临时库即可覆盖。
+		_groupOptions = new GroupOptionStore(_db);
 
 		HasMasterPassword = _crypto.IsMasterPasswordConfigured();
 		LoadOptions();
@@ -2183,6 +2497,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				RedirectClipboard = result3;
 			}
+			SortByRecent = string.Equals(_db.GetSetting(SettingKeys.OptionSortMode), "recent", StringComparison.OrdinalIgnoreCase);
 		}
 		finally
 		{
@@ -2255,6 +2570,16 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
+	partial void OnSortByRecentChanged(bool value)
+	{
+		if (!_suppressOptionSave)
+		{
+			_db.SetSetting(SettingKeys.OptionSortMode, value ? "recent" : "manual");
+		}
+		// 切换排序方式立刻生效：重载会按新规则重排，用户无需重启。
+		ReloadConnections();
+	}
+
 	partial void OnSelectedConnectionChanged(ConnectionItem? value)
 	{
 		if (value != null)
@@ -2275,7 +2600,9 @@ namespace RemoteDesktopPlus.ViewModels
 {
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -2293,19 +2620,82 @@ public partial class MainViewModel
 	public void ReloadConnections()
 	{
 		Connections.Clear();
-		foreach (ConnectionItem item in _db.LoadAll())
+		IEnumerable<ConnectionItem> source = _db.LoadAll();
+		// 按最近连接排序时忽略拖拽顺序：SortOrder 是人工偏好，
+		// 最近连接是使用频率，两者同时生效会让顺序不可预测。
+		if (SortByRecent)
+		{
+			source = source
+				.OrderByDescending(c => c.LastConnectedAt)
+				.ThenBy(c => c.SortOrder)
+				.ThenBy(c => c.Id);
+		}
+		foreach (ConnectionItem item in source)
 		{
 			Connections.Add(item);
 		}
+		RefreshGroupNames();
+	}
+
+	/// <summary>
+	/// 重排当前列表（不重新读库）。连接成功回写时间后调用，
+	/// 让「最近连接」列与顺序立刻反映变化，而不是等下次启动。
+	/// </summary>
+	public void ApplySortInPlace()
+	{
+		if (!SortByRecent || Connections.Count <= 1)
+		{
+			return;
+		}
+		List<ConnectionItem> ordered = Connections
+			.OrderByDescending(c => c.LastConnectedAt)
+			.ThenBy(c => c.SortOrder)
+			.ThenBy(c => c.Id)
+			.ToList();
+		for (int i = 0; i < ordered.Count; i++)
+		{
+			int current = Connections.IndexOf(ordered[i]);
+			if (current != i)
+			{
+				Connections.Move(current, i);
+			}
+		}
+	}
+
+	/// <summary>
+	/// 合并「全局设置」与「分组覆盖」，得到本次连接实际生效的 RDP 选项。
+	/// 分组没配的项一律继承全局（GroupOptions 里为 null），
+	/// 这样改全局值能影响所有未显式覆盖的组，不必逐组同步。
+	/// </summary>
+	public RdpLauncher.RdpOptions BuildEffectiveOptions(ConnectionItem item)
+	{
+		GroupOptions? group = _groupOptions.Get(item.GroupName);
+
+		string resolution = group?.Resolution ?? Resolution;
+		bool redirectClipboard = group?.RedirectClipboard ?? RedirectClipboard;
+		bool redirectDrive = group?.RedirectLocalDrive ?? RedirectLocalDrive;
+		string driveSpec = group?.LocalDriveLetter ?? LocalDriveLetter;
+
+		var (width, height) = ParseResolution(resolution);
+		return new RdpLauncher.RdpOptions(
+			item.Host,
+			item.Port,
+			item.UserName,
+			_crypto.Decrypt(item.EncryptedPassword),
+			width,
+			height,
+			redirectDrive,
+			ToDriveSpec(driveSpec),
+			ForceConsole,
+			redirectClipboard);
 	}
 
 	public void ConnectItem(ConnectionItem item)
 	{
 		SelectedConnection = item;
-		var (width, height) = ParseResolution(Resolution);
 		try
 		{
-			_launcher.Launch(new RdpLauncher.RdpOptions(item.Host, item.Port, item.UserName, _crypto.Decrypt(item.EncryptedPassword), width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
+			_launcher.Launch(BuildEffectiveOptions(item));
 		}
 		catch (Exception ex)
 		{
@@ -2320,6 +2710,42 @@ public partial class MainViewModel
 			long now = DateTimeOffset.Now.ToUnixTimeSeconds();
 			item.LastConnectedAt = now;
 			_db.UpdateLastConnectedAt(item.Id, now);
+			// 回写后立刻让「最近连接」列与排序反映变化，而不是等下次启动。
+			ApplySortInPlace();
+		}
+	}
+
+	/// <summary>
+	/// 把选中的连接导出为独立 .rdp 文件，便于分享给同事或排障时对照语法。
+	/// <para>
+	/// 安全性质：导出内容**不含密码**（复用 <see cref="RdpLauncher.BuildRdpContent"/>，
+	/// 该方法有测试固化「绝不出现明文密码」）。接收方首次连接仍需自行输入凭据。
+	/// </para>
+	/// </summary>
+	[RelayCommand(CanExecute = "HasSelected")]
+	private void ExportSelectedRdp()
+	{
+		if (SelectedConnection == null)
+		{
+			return;
+		}
+		string safeHost = string.Join("_", SelectedConnection.Host.Split(Path.GetInvalidFileNameChars()));
+		string? target = _dialogs.PickRdpExportTarget($"{safeHost}_{SelectedConnection.Port}.rdp");
+		if (string.IsNullOrEmpty(target))
+		{
+			return;
+		}
+		try
+		{
+			RdpLauncher.RdpOptions opt = BuildEffectiveOptions(SelectedConnection);
+			// .rdp 用 UTF-16LE：与 mstsc 自身的写法一致，保证中文备注/主机名不乱码。
+			File.WriteAllText(target, RdpLauncher.BuildRdpContent(opt), Encoding.Unicode);
+			_dialogs.ShowMessage("已导出到：\n" + target + "\n\n注意：文件不含密码，首次连接需自行输入。", "导出完成");
+		}
+		catch (Exception ex)
+		{
+			Log.Error("导出 .rdp 失败: " + target, ex);
+			_dialogs.ShowMessage("导出失败：" + ex.Message, "错误", DialogKind.Error);
 		}
 	}
 
@@ -2336,6 +2762,7 @@ public partial class MainViewModel
 			Port = result.Port,
 			UserName = result.UserName,
 			Remark = result.Remark,
+			GroupName = result.GroupName ?? string.Empty,
 			EncryptedPassword = _crypto.Encrypt(result.Password),
 			SortOrder = Connections.Count + 1
 		};
@@ -2360,6 +2787,7 @@ public partial class MainViewModel
 		SelectedConnection.Port = result.Port;
 		SelectedConnection.UserName = result.UserName;
 		SelectedConnection.Remark = result.Remark;
+		SelectedConnection.GroupName = result.GroupName ?? string.Empty;
 		SelectedConnection.EncryptedPassword = _crypto.Encrypt(result.Password);
 		_db.Update(SelectedConnection);
 		// 编辑的是当前选中的连接，表单需要跟着刷新，否则界面显示的是旧值。
@@ -2367,6 +2795,8 @@ public partial class MainViewModel
 		Port = SelectedConnection.Port;
 		UserName = SelectedConnection.UserName;
 		Password = result.Password;
+		// 改分组可能让「按组筛选」的可见集合变化，重建一次已选分组列表。
+		RefreshGroupNames();
 	}
 
 	[RelayCommand(CanExecute = "HasSelected")]
@@ -2440,6 +2870,12 @@ public partial class MainViewModel
 
 	public void Drop(IDropInfo dropInfo)
 	{
+		// 按最近连接排序时禁用手工拖拽：此时顺序由 LastConnectedAt 决定，
+		// 允许拖拽会写进 SortOrder 却看不见效果，属于误导。
+		if (SortByRecent)
+		{
+			return;
+		}
 		if (dropInfo.Data is ConnectionItem item && dropInfo.TargetItem is ConnectionItem)
 		{
 			int num = Connections.IndexOf(item);
@@ -2487,6 +2923,15 @@ public partial class MainViewModel
 			return;
 		}
 		SaveOrUpdateForm();
+		// 表单连接同样要享受分组覆盖：先找到与表单主机/端口匹配的记录，
+		// 用它的分组；找不到（新表单）则按无分组处理，走全局设置。
+		ConnectionItem? matched = Connections.FirstOrDefault(c =>
+			string.Equals(c.Host, Host, StringComparison.OrdinalIgnoreCase) && c.Port == Port);
+		if (matched != null)
+		{
+			_launcher.Launch(BuildEffectiveOptions(matched));
+			return;
+		}
 		var (width, height) = ParseResolution(Resolution);
 		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
 	}
@@ -3278,6 +3723,8 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		};
 		// 启动 RDP 状态轮询：窗口已显示，Dispatcher 可用
 		mainViewModel.StartStatusPolling();
+		// 把 DataGrid 的默认视图交给 VM，用于按分组筛选（不改集合本身，保住拖拽排序）
+		mainViewModel.AttachConnectionsView(System.Windows.Data.CollectionViewSource.GetDefaultView(ConnList.ItemsSource));
 		base.Closed += (_, _) => mainViewModel.StopStatusPolling();
 	}
 
@@ -3437,6 +3884,18 @@ public sealed class WpfDialogService : IDialogService
 		OpenFileDialog dialog = new OpenFileDialog
 		{
 			Filter = "数据备份 (*.db)|*.db|所有文件 (*.*)|*.*"
+		};
+		return dialog.ShowDialog().GetValueOrDefault() ? dialog.FileName : null;
+	}
+
+	public string? PickRdpExportTarget(string suggestedFileName)
+	{
+		SaveFileDialog dialog = new SaveFileDialog
+		{
+			Filter = "远程桌面连接 (*.rdp)|*.rdp|所有文件 (*.*)|*.*",
+			DefaultExt = ".rdp",
+			AddExtension = true,
+			FileName = suggestedFileName
 		};
 		return dialog.ShowDialog().GetValueOrDefault() ? dialog.FileName : null;
 	}

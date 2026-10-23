@@ -31,8 +31,8 @@ public sealed class FakeDialogService : IDialogService
 	public Queue<bool> SetLaunchPasswordAnswers { get; } = new Queue<bool>();
 
 	public Queue<string?> ExportTargets { get; } = new Queue<string?>();
-
 	public Queue<string?> ImportSources { get; } = new Queue<string?>();
+	public Queue<string?> RdpExportTargets { get; } = new Queue<string?>();
 
 	/// <summary>记录每次 MasterPassword 弹窗的用途，用于断言「导入后要求解锁」。</summary>
 	public List<MasterPasswordPurpose> MasterPasswordPurposes { get; } = new List<MasterPasswordPurpose>();
@@ -79,6 +79,11 @@ public sealed class FakeDialogService : IDialogService
 	public string? PickImportSource()
 	{
 		return ImportSources.Count > 0 ? ImportSources.Dequeue() : null;
+	}
+
+	public string? PickRdpExportTarget(string suggestedFileName)
+	{
+		return RdpExportTargets.Count > 0 ? RdpExportTargets.Dequeue() : null;
 	}
 
 	/// <summary>便捷构造：一份已填好的新建/编辑表单内容。</summary>

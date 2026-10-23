@@ -59,6 +59,10 @@
           </Grid>
         </StackPanel>
         <StackPanel Margin="0,14,0,0">
+          <TextBlock Style="{StaticResource Eyebrow}" Text="分组" Margin="0,0,0,6" />
+          <ComboBox IsEditable="True" Text="{Binding GroupName, UpdateSourceTrigger=PropertyChanged}" ToolTip="留空表示不分组；可从下拉选已有分组，也可直接输入新组名" />
+        </StackPanel>
+        <StackPanel Margin="0,14,0,0">
           <TextBlock Style="{StaticResource Eyebrow}" Text="备注" Margin="0,0,0,6" />
           <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Text="{Binding Remark, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
