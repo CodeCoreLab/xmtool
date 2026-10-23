@@ -53,9 +53,10 @@ public class RdpLauncherTests
 		int? h = null,
 		bool redirect = false,
 		string letter = "D",
-		bool forceConsole = false)
+		bool forceConsole = false,
+		bool clipboard = true)
 	{
-		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, redirect, letter, forceConsole);
+		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, redirect, letter, forceConsole, clipboard);
 	}
 
 	private static T WithRecordingBackend<T>(Func<RecordingRdpBackend, T> body, out RecordingRdpBackend backend)
@@ -126,6 +127,21 @@ public class RdpLauncherTests
 	{
 		Assert.Contains("connect to console:i:1", RdpLauncher.BuildRdpContent(Opt(forceConsole: true)));
 		Assert.DoesNotContain("connect to console", RdpLauncher.BuildRdpContent(Opt(forceConsole: false)));
+	}
+
+	[Fact]
+	public void BuildRdpContent_Clipboard_OnByDefault()
+	{
+		// mstsc 对 redirectclipboard 是「键缺失即按禁用」，故默认必须显式写出 i:1。
+		// 这条断言防的是「以后有人把默认值改回 false 或漏写该行」导致的复制粘贴失效。
+		Assert.Contains("redirectclipboard:i:1", RdpLauncher.BuildRdpContent(Opt()));
+	}
+
+	[Fact]
+	public void BuildRdpContent_Clipboard_CanBeDisabledExplicitly()
+	{
+		Assert.Contains("redirectclipboard:i:0", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
+		Assert.DoesNotContain("redirectclipboard:i:1", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
 	}
 
 	[Fact]

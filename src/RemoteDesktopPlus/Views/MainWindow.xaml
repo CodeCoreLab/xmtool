@@ -327,7 +327,8 @@
                       <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
                         <CheckBox Content="连接本地盘符" IsChecked="{Binding RedirectLocalDrive}" />
                         <ComboBox Width="64" Margin="10,0,22,0" ItemsSource="{Binding DriveLetters}" SelectedItem="{Binding LocalDriveLetter}" />
-                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" />
+                        <CheckBox Content="共享剪贴板" IsChecked="{Binding RedirectClipboard}" />
+                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" Margin="22,0,0,0" />
                       </StackPanel>
                     </StackPanel>
                   </Border>

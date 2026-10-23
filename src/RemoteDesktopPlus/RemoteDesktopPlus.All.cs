@@ -226,6 +226,8 @@ public static class SettingKeys
 	public const string OptionLocalDriveLetter = "options.local_drive_letter";
 
 	public const string OptionForceConsole = "options.force_console";
+
+	public const string OptionRedirectClipboard = "options.redirect_clipboard";
 }
 }
 
@@ -1225,7 +1227,12 @@ using System.Threading.Tasks;
 /// </summary>
 public static class RdpLauncher
 {
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole);
+	/// <param name="RedirectClipboard">
+	/// 是否启用剪贴板重定向（默认 true）。
+	/// 缺省为 true 是刻意的：本地与远程之间复制粘贴属于基本预期，
+	/// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理（不是按 UI 默认勾选）。
+	/// </param>
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true);
 
 	private static IRdpBackend _backend = WindowsRdpBackend.Instance;
 
@@ -1328,6 +1335,10 @@ public static class RdpLauncher
 		{
 			sb.AppendLine("screen mode id:i:2");
 		}
+
+		// 剪贴板重定向：mstsc 对此键**显式关闭优先**，键缺失时按禁用处理，
+		// 故必须显式写出 i:1，不能依赖「未写就默认开」。
+		sb.AppendLine($"redirectclipboard:i:{(opt.RedirectClipboard ? 1 : 0)}");
 
 		if (opt.RedirectLocalDrive && !string.IsNullOrEmpty(opt.LocalDriveLetter))
 		{
@@ -1966,6 +1977,10 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private bool forceConsole;
 
+	/// <summary>剪贴板重定向开关，默认开启（见 RdpOptions.RedirectClipboard 的说明）。</summary>
+	[ObservableProperty]
+	private bool redirectClipboard = true;
+
 	[ObservableProperty]
 	private bool optionsExpanded = true;
 
@@ -2093,6 +2108,11 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				ForceConsole = result2;
 			}
+			// 无历史设置时保持字段默认 true（首次运行也默认开启剪贴板）
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionRedirectClipboard), out var result3))
+			{
+				RedirectClipboard = result3;
+			}
 		}
 		finally
 		{
@@ -2157,6 +2177,14 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
+	partial void OnRedirectClipboardChanged(bool value)
+	{
+		if (!_suppressOptionSave)
+		{
+			_db.SetSetting(SettingKeys.OptionRedirectClipboard, value.ToString());
+		}
+	}
+
 	partial void OnSelectedConnectionChanged(ConnectionItem? value)
 	{
 		if (value != null)
@@ -2207,7 +2235,7 @@ public partial class MainViewModel
 		var (width, height) = ParseResolution(Resolution);
 		try
 		{
-			_launcher.Launch(new RdpLauncher.RdpOptions(item.Host, item.Port, item.UserName, _crypto.Decrypt(item.EncryptedPassword), width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole));
+			_launcher.Launch(new RdpLauncher.RdpOptions(item.Host, item.Port, item.UserName, _crypto.Decrypt(item.EncryptedPassword), width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole, RedirectClipboard));
 		}
 		catch (Exception ex)
 		{
@@ -2390,7 +2418,7 @@ public partial class MainViewModel
 		}
 		SaveOrUpdateForm();
 		var (width, height) = ParseResolution(Resolution);
-		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole));
+		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole, RedirectClipboard));
 	}
 
 	private bool CanConnect()
@@ -2474,6 +2502,61 @@ using RemoteDesktopPlus.Services;
 /// </summary>
 public partial class MainViewModel
 {
+	/// <summary>
+	/// 状态轮询定时器。存在的理由：RDP 是否在监听会因外部因素变化
+	/// （服务被停、端口被改、进程被挤占），而 ViewModel 只在构造与用户操作后刷新一次，
+	/// 界面会长期停在启动瞬间的快照上，显示与事实不符。
+	/// 用 DispatcherTimer 而非 System.Timers.Timer：后者的回调在后台线程，
+	/// 直接写 ObservableProperty 会触发跨线程 UI 访问异常。
+	/// </summary>
+	private System.Windows.Threading.DispatcherTimer? _statusTimer;
+
+	/// <summary>
+	/// 启动状态轮询（幂等：重复调用不会叠加定时器）。
+	/// 由视图在 Loaded 时调用——构造期还没有 Dispatcher，建不出有效定时器。
+	/// </summary>
+	public void StartStatusPolling(TimeSpan? interval = null)
+	{
+		if (_statusTimer != null)
+		{
+			return;
+		}
+		_statusTimer = new System.Windows.Threading.DispatcherTimer
+		{
+			Interval = interval ?? TimeSpan.FromSeconds(3)
+		};
+		_statusTimer.Tick += (_, _) => SafeRefreshServerStatus();
+		_statusTimer.Start();
+		SafeRefreshServerStatus();
+	}
+
+	/// <summary>停止轮询，供窗口关闭时调用（避免定时器持引用导致不释放）。</summary>
+	public void StopStatusPolling()
+	{
+		if (_statusTimer == null)
+		{
+			return;
+		}
+		_statusTimer.Stop();
+		_statusTimer = null;
+	}
+
+	/// <summary>
+	/// 轮询专用刷新：三条探测中任何一条抛异常（注册表无权限、服务查询失败等）
+	/// 都不能让定时器回调炸掉界面，故整体兜住并降级为「保持上次值」。
+	/// </summary>
+	private void SafeRefreshServerStatus()
+	{
+		try
+		{
+			RefreshServerStatus();
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("刷新远程桌面状态失败", ex);
+		}
+	}
+
 	public void RefreshServerStatus()
 	{
 		IsRemoteEnabled = RdpServerService.IsRemoteEnabled();
@@ -3123,6 +3206,9 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 				PwdBox.Password = mainViewModel.Password;
 			}
 		};
+		// 启动 RDP 状态轮询：窗口已显示，Dispatcher 可用
+		mainViewModel.StartStatusPolling();
+		base.Closed += (_, _) => mainViewModel.StopStatusPolling();
 	}
 
 	private void PwdBox_PasswordChanged(object sender, RoutedEventArgs e)
