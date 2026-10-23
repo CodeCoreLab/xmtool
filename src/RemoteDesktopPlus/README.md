@@ -68,6 +68,36 @@ dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained f
 
 发布产物为**单个 `小马远程桌面.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
 
+### 改界面后如何验证布局（重要）
+
+exe 的 manifest 声明了 `requireAdministrator`，**无法用脚本直接启动截图**（`Popen` 报 `WinError 740`）。
+而布局问题（控件被裁、表头溢出、文字重叠）**看代码判断不出来**——必须看到真实渲染结果。
+
+做法：反射加载已构建的 DLL，实例化 `MainWindow` 后用 `RenderTargetBitmap` 渲染成 PNG，绕开提权：
+
+```csharp
+var asm = Assembly.LoadFrom(@"<...>\bin\Release\net8.0-windows\小马远程桌面.dll");
+
+var app = new Application();                       // 必须先装配样式，否则静态资源找不到
+app.Resources.MergedDictionaries.Add(new ResourceDictionary {
+    Source = new Uri("pack://application:,,,/小马远程桌面;component/styles/colors.xaml") });
+app.Resources.MergedDictionaries.Add(new ResourceDictionary {
+    Source = new Uri("pack://application:,,,/小马远程桌面;component/styles/controls.xaml") });
+
+var db = new DatabaseService(tempDbPath);
+db.Initialize();                                   // 反射创建不会自动建表，必须显式调用
+var vm = new MainViewModel(db, new CryptoService(db), new WpfDialogService(db, crypto), null);
+var w = new MainWindow(vm);
+w.Width = 1280; w.Height = 920;
+w.Show(); w.UpdateLayout();
+
+var bmp = new RenderTargetBitmap((int)w.ActualWidth, (int)w.ActualHeight, 96, 96, PixelFormats.Pbgra32);
+bmp.Render(w);                                     // 存成 PNG 即可肉眼核对
+```
+
+三个必踩的坑：① 样式字典不装配 → 静态资源找不到；② `DatabaseService` 需显式 `Initialize()` 建表，
+否则 `no such table: Settings`；③ 渲染工程要把 `app.ico` 注册为 `Resource`，窗口 Icon 引用了它。
+
 ## 数据与凭据
 
 - 数据库随程序同目录：`data.db`（SQLite），首次启动自动建表。
