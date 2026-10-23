@@ -86,6 +86,21 @@ public sealed class FakeDialogService : IDialogService
 		return RdpExportTargets.Count > 0 ? RdpExportTargets.Dequeue() : null;
 	}
 
+	/// <summary>
+	/// 记录每次分组设置面板被打开时收到的分组名，并按预先排队的值决定是否「保存」。
+	/// 真实面板的控件行为不在单测范围内（那是 WPF 交互），
+	/// 单测要覆盖的是「VM 是否把正确的库与参数交给了面板」。
+	/// </summary>
+	public List<string> GroupOptionsOpened { get; } = new List<string>();
+
+	public Queue<bool> GroupOptionsAnswers { get; } = new Queue<bool>();
+
+	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
+	{
+		GroupOptionsOpened.Add(groupName);
+		return GroupOptionsAnswers.Count > 0 && GroupOptionsAnswers.Dequeue();
+	}
+
 	/// <summary>便捷构造：一份已填好的新建/编辑表单内容。</summary>
 	public static ConnectionFormResult Form(string host, int port = 3389, string user = "Administrator", string password = "pw", string remark = "")
 	{

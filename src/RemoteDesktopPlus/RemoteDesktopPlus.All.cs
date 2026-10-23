@@ -1677,6 +1677,7 @@ public static class OnlineProbe
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Services
 {
+using System.Collections.Generic;
 using RemoteDesktopPlus.Models;
 
 /// <summary>弹窗的语义分类，避免把 WPF 的 MessageBoxImage 类型泄漏进 ViewModel。</summary>
@@ -1739,6 +1740,16 @@ public interface IDialogService
 
 	/// <summary>选择导入来源文件；用户取消返回 null。</summary>
 	string? PickImportSource();
+
+	/// <summary>
+	/// 打开「分组设置」面板，为该分组配置连接参数覆盖。
+	/// </summary>
+	/// <param name="groupName">要配置的分组名（非空）。</param>
+	/// <param name="store">分组配置存储，面板直接通过它读写。</param>
+	/// <param name="resolutionOptions">分辨率候选。</param>
+	/// <param name="driveLetterOptions">盘符候选。</param>
+	/// <returns>用户是否点了保存。</returns>
+	bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions);
 }
 }
 
@@ -2186,6 +2197,7 @@ using System.Linq;
 using System.Text;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GongSolutions.Wpf.DragDrop;
 using RemoteDesktopPlus.Models;
 using RemoteDesktopPlus.Services;
@@ -2326,6 +2338,8 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	partial void OnSelectedGroupFilterChanged(string value)
 	{
 		ApplyGroupFilter();
+		// 选中的是「全部分组」时不应能进分组设置，故命令可用性要跟着变。
+		EditGroupOptionsCommand.NotifyCanExecuteChanged();
 	}
 
 	/// <summary>按当前选中的分组重建筛选下拉（保持原选中项不丢）。</summary>
@@ -2386,6 +2400,35 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			? null
 			: new Predicate<object>(o => o is ConnectionItem c
 				&& string.Equals(c.GroupName ?? string.Empty, filter, StringComparison.OrdinalIgnoreCase));
+	}
+
+	/// <summary>
+	/// 打开「分组设置」面板，为当前筛选的分组配置连接参数覆盖。
+	/// 入口挂在筛选下拉旁：用户先选组、再改组的配置，符合「看到什么就配什么」。
+	/// </summary>
+	[RelayCommand(CanExecute = "HasConcreteGroupSelected")]
+	private void EditGroupOptions()
+	{
+		string group = SelectedGroupFilter;
+		if (string.IsNullOrEmpty(group) || AllGroupsDisplayName.Equals(group, StringComparison.Ordinal))
+		{
+			_dialogs.ShowMessage("请先在左上角下拉里选中一个具体分组，再修改它的设置。", "提示");
+			return;
+		}
+		bool saved = _dialogs.EditGroupOptions(group, _groupOptions, ResolutionOptions, DriveLetters);
+		if (!saved)
+		{
+			return;
+		}
+		// 分组可能刚被配上覆盖（原先不在下拉里），刷新一遍让选项与筛选状态一致。
+		RefreshGroupNames();
+		ApplyGroupFilter();
+	}
+
+	private bool HasConcreteGroupSelected()
+	{
+		string group = SelectedGroupFilter;
+		return !string.IsNullOrEmpty(group) && !AllGroupsDisplayName.Equals(group, StringComparison.Ordinal);
 	}
 
 	/// <summary>
@@ -3497,6 +3540,157 @@ public partial class MasterPasswordWindow : Window
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 追加区段：RemoteDesktopPlus.Views/GroupSettingsWindow.cs  →  namespace RemoteDesktopPlus.Views
+// ════════════════════════════════════════════════════════════════════════
+namespace RemoteDesktopPlus.Views
+{
+using System;
+using System.Collections.Generic;
+using System.Windows;
+using RemoteDesktopPlus.Services;
+
+/// <summary>
+/// 分组级连接参数设置面板。视图结构见 Views/GroupSettingsWindow.xaml。
+/// <para>
+/// 交互约定：每个可覆盖项前都有一个「覆盖」勾选框。
+/// 不勾 = 该项继承全局（写入 null），勾上 = 以右侧控件值为准。
+/// 这样用户能明确区分「本组特意关掉了剪贴板」与「本组没配，跟着全局走」——
+/// 若只用一个复选框，取消勾选就无法表达「覆盖为 false」。
+/// </para>
+/// </summary>
+public partial class GroupSettingsWindow : Window
+{
+	private readonly string _groupName;
+
+	private readonly GroupOptionStore _store;
+
+	/// <summary>保存后的结果，供调用方测试断言（Window 关闭后无法再读控件）。</summary>
+	public GroupOptions? Result { get; private set; }
+
+	public GroupSettingsWindow(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
+	{
+		_groupName = groupName ?? string.Empty;
+		_store = store ?? throw new ArgumentNullException(nameof(store));
+		InitializeComponent();
+
+		GroupNameText.Text = string.IsNullOrWhiteSpace(_groupName) ? "（未分组）" : _groupName;
+
+		foreach (string r in resolutionOptions)
+		{
+			ResolutionBox.Items.Add(r);
+		}
+		foreach (string d in driveLetterOptions)
+		{
+			DriveLetterBox.Items.Add(d);
+		}
+		// 兜底下拉至少有一项，避免空 ComboBox 让用户无从下手
+		if (ResolutionBox.Items.Count > 0)
+		{
+			ResolutionBox.SelectedIndex = 0;
+		}
+		if (DriveLetterBox.Items.Count > 0)
+		{
+			DriveLetterBox.SelectedIndex = 0;
+		}
+
+		LoadExisting();
+	}
+
+	private void LoadExisting()
+	{
+		GroupOptions? opt = _store.Get(_groupName);
+		if (opt == null)
+		{
+			UpdateEnabledState();
+			return;
+		}
+		if (opt.Resolution != null)
+		{
+			OverrideResolution.IsChecked = true;
+			ResolutionBox.SelectedItem = opt.Resolution;
+		}
+		if (opt.RedirectClipboard != null)
+		{
+			OverrideClipboard.IsChecked = true;
+			ClipboardValue.IsChecked = opt.RedirectClipboard.Value;
+		}
+		if (opt.RedirectLocalDrive != null)
+		{
+			OverrideDrive.IsChecked = true;
+			DriveValue.IsChecked = opt.RedirectLocalDrive.Value;
+		}
+		if (opt.LocalDriveLetter != null)
+		{
+			DriveLetterBox.SelectedItem = opt.LocalDriveLetter;
+		}
+		UpdateEnabledState();
+	}
+
+	/// <summary>未勾「覆盖」时把右侧控件置灰，避免用户误以为改了会生效。</summary>
+	private void Override_Changed(object sender, RoutedEventArgs e)
+	{
+		UpdateEnabledState();
+	}
+
+	private void UpdateEnabledState()
+	{
+		bool res = OverrideResolution.IsChecked == true;
+		bool clip = OverrideClipboard.IsChecked == true;
+		bool drive = OverrideDrive.IsChecked == true;
+
+		ResolutionBox.IsEnabled = res;
+		ClipboardValue.IsEnabled = clip;
+		DriveValue.IsEnabled = drive;
+		DriveLetterBox.IsEnabled = drive;
+	}
+
+	private void ClearAll_Click(object sender, RoutedEventArgs e)
+	{
+		OverrideResolution.IsChecked = false;
+		OverrideClipboard.IsChecked = false;
+		OverrideDrive.IsChecked = false;
+		ClipboardValue.IsChecked = false;
+		DriveValue.IsChecked = false;
+		UpdateEnabledState();
+		MessageBox.Show("已清除全部覆盖项，保存后本组将完全继承全局设置。", "提示");
+	}
+
+	private void Cancel_Click(object sender, RoutedEventArgs e)
+	{
+		base.DialogResult = false;
+		Close();
+	}
+
+	private void Ok_Click(object sender, RoutedEventArgs e)
+	{
+		GroupOptions opt = new GroupOptions();
+		if (OverrideResolution.IsChecked == true && ResolutionBox.SelectedItem is string r)
+		{
+			opt.Resolution = r;
+		}
+		if (OverrideClipboard.IsChecked == true)
+		{
+			opt.RedirectClipboard = ClipboardValue.IsChecked == true;
+		}
+		if (OverrideDrive.IsChecked == true)
+		{
+			opt.RedirectLocalDrive = DriveValue.IsChecked == true;
+			// 盘符只在与「共享开启」同时存在时才有意义，否则写进去是无效配置。
+			if (opt.RedirectLocalDrive == true && DriveLetterBox.SelectedItem is string d)
+			{
+				opt.LocalDriveLetter = d;
+			}
+		}
+		// 全部字段为空时 Set 会移除该组条目，等价于「恢复全继承」。
+		_store.Set(_groupName, opt);
+		Result = opt;
+		base.DialogResult = true;
+		Close();
+	}
+}
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 区段 28 / 39：RemoteDesktopPlus.Views/EditConnectionWindow.cs  →  namespace RemoteDesktopPlus.Views
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Views
@@ -3793,6 +3987,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Views
 {
+using System.Collections.Generic;
 using System.Windows;
 using Microsoft.Win32;
 using RemoteDesktopPlus.Models;
@@ -3862,6 +4057,13 @@ public sealed class WpfDialogService : IDialogService
 		return window.ShowDialog().GetValueOrDefault();
 	}
 
+	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
+	{
+		GroupSettingsWindow window = new GroupSettingsWindow(groupName, store, resolutionOptions, driveLetterOptions);
+		window.Owner = OwnerOrNull();
+		return window.ShowDialog().GetValueOrDefault();
+	}
+
 	public bool ShowMasterPassword(MasterPasswordPurpose purpose)
 	{
 		MasterPasswordWindow window = new MasterPasswordWindow(purpose, _db, _crypto);
@@ -3895,8 +4097,7 @@ public sealed class WpfDialogService : IDialogService
 			Filter = "远程桌面连接 (*.rdp)|*.rdp|所有文件 (*.*)|*.*",
 			DefaultExt = ".rdp",
 			AddExtension = true,
-			FileName = suggestedFileName
-		};
+			FileName = suggestedFileName		};
 		return dialog.ShowDialog().GetValueOrDefault() ? dialog.FileName : null;
 	}
 

@@ -433,7 +433,8 @@
                     </StackPanel>
                   </StackPanel>
                   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,12,0">
-                    <ComboBox Width="120" ItemsSource="{Binding GroupFilterOptions}" SelectedItem="{Binding SelectedGroupFilter}" Margin="0,0,12,0" ToolTip="按分组筛选列表；分组名在连接的编辑对话框里设置" />
+                    <ComboBox Width="120" ItemsSource="{Binding GroupFilterOptions}" SelectedItem="{Binding SelectedGroupFilter}" Margin="0,0,8,0" ToolTip="按分组筛选列表；分组名在连接的编辑对话框里设置" />
+                    <Button Content="组设置" Style="{StaticResource ButtonSecondary}" Height="36" Padding="12,0" Margin="0,0,12,0" Command="{Binding EditGroupOptionsCommand}" ToolTip="为当前选中的分组覆盖分辨率 / 剪贴板 / 磁盘共享（需先选中具体分组）" />
                     <CheckBox Content="按最近连接排序" IsChecked="{Binding SortByRecent}" VerticalAlignment="Center" ToolTip="勾选后按最后使用时间倒序；取消则回到手动拖拽顺序" />
                   </StackPanel>
                   <Button Grid.Column="3" Style="{StaticResource ButtonSecondary}" Margin="0,0,10,0" Height="36" Command="{Binding ScanOnlineCommand}">

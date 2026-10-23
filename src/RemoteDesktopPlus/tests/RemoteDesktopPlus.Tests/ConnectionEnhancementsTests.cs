@@ -345,4 +345,68 @@ public class ConnectionEnhancementsTests
 
 		Assert.DoesNotContain(dialogs.Messages, m => m.Message.Contains("已导出"));
 	}
+
+	// ─────────────────── ④ 分组设置面板接线（命令层） ───────────────────
+
+	[Fact]
+	public void EditGroupOptions_BlockedWhenAllGroupsSelected()
+	{
+		// 「全部分组」不是一个真实分组，不该能打开它的设置面板。
+		using TempDb tmp = new TempDb();
+		var (vm, db, dialogs) = Create(tmp);
+		vm.SelectedGroupFilter = MainViewModel.AllGroupsDisplayName;
+
+		Assert.False(vm.EditGroupOptionsCommand.CanExecute(null));
+		vm.EditGroupOptionsCommand.Execute(null);
+
+		Assert.Empty(dialogs.GroupOptionsOpened);
+		Assert.Contains(dialogs.Messages, m => m.Message.Contains("具体分组"));
+	}
+
+	[Fact]
+	public void EditGroupOptions_OpensWithSelectedGroupAndPassesOptions()
+	{
+		using TempDb tmp = new TempDb();
+		var (vm, db, dialogs) = Create(tmp);
+		Seed(db, vm, "h", group: "生产组");
+		vm.SelectedGroupFilter = "生产组";
+
+		Assert.True(vm.EditGroupOptionsCommand.CanExecute(null));
+		vm.EditGroupOptionsCommand.Execute(null);
+
+		Assert.Equal(new[] { "生产组" }, dialogs.GroupOptionsOpened.ToArray());
+	}
+
+	[Fact]
+	public void EditGroupOptions_AfterSave_GroupAppearsInFilterAndTakesEffect()
+	{
+		// 端到端：面板保存后，VM 必须能立刻用上这组配置，
+		// 而不是等重启（这正是去掉缓存要保证的性质）。
+		using TempDb tmp = new TempDb();
+		var (vm, db, dialogs) = Create(tmp);
+		ConnectionItem item = Seed(db, vm, "10.5.5.5", group: "只读组");
+		vm.SelectedGroupFilter = "只读组";
+
+		// 模拟面板保存：直接写 store（面板 UI 交互不在单测范围，这里验证 VM 侧生效链路）
+		new GroupOptionStore(db).Set("只读组", new GroupOptions { RedirectClipboard = false });
+		dialogs.GroupOptionsAnswers.Enqueue(true);
+		vm.EditGroupOptionsCommand.Execute(null);
+
+		Assert.False(vm.BuildEffectiveOptions(item).RedirectClipboard);
+	}
+
+	[Fact]
+	public void EditGroupOptions_Cancelled_DoesNotDisturbState()
+	{
+		using TempDb tmp = new TempDb();
+		var (vm, db, dialogs) = Create(tmp);
+		Seed(db, vm, "h2", group: "某组");
+		vm.SelectedGroupFilter = "某组";
+		string[] before = vm.GroupFilterOptions.ToArray();
+
+		dialogs.GroupOptionsAnswers.Enqueue(false);
+		vm.EditGroupOptionsCommand.Execute(null);
+
+		Assert.Equal(before, vm.GroupFilterOptions.ToArray());
+	}
 }
