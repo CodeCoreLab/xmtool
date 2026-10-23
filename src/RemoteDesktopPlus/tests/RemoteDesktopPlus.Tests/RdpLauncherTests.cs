@@ -52,7 +52,7 @@ public class RdpLauncherTests
 		int? w = null,
 		int? h = null,
 		bool redirect = false,
-		string letter = "D",
+		string? letter = "D",
 		bool forceConsole = false,
 		bool clipboard = true)
 	{
@@ -116,10 +116,37 @@ public class RdpLauncherTests
 	[Fact]
 	public void BuildRdpContent_RedirectDrive_RequiresBothFlagAndLetter()
 	{
-		Assert.Contains("drivestoredirect:s:D:", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "D")));
+		// 规范语法：每个盘符带尾随反斜杠并以分号结尾（官方示例 C:\;E:\;）。
+		Assert.Contains(@"drivestoredirect:s:D:\;", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "D")));
 		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: false, letter: "D")));
 		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "")));
 		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: null)));
+	}
+
+	[Fact]
+	public void BuildRdpContent_RedirectAllDrives_EmitsStarWithoutTrailingColon()
+	{
+		// `*` 覆盖全部驱动器且是动态的（连接后插入的 U 盘也会重定向）。
+		// 关键：绝对不能写成 `s:*:` —— 那是非法语法，会让整段重定向失效。
+		string content = RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "*"));
+
+		Assert.Contains("drivestoredirect:s:*", content);
+		Assert.DoesNotContain("drivestoredirect:s:*:", content);
+	}
+
+	[Theory]
+	[InlineData("D", @"D:\;")]
+	[InlineData("D:", @"D:\;")]
+	[InlineData(@"D:\", @"D:\;")]
+	[InlineData("d", @"D:\;")]
+	[InlineData("*", "*")]
+	[InlineData("", "")]
+	[InlineData(null, "")]
+	[InlineData("1", "")]
+	public void NormalizeDriveSpec_AcceptsCommonInputShapes(string? input, string expected)
+	{
+		// 归一化集中在一处，避免调用方传入 "D"/"D:"/"D:\" 任一形态时输出不一致。
+		Assert.Equal(expected, RdpLauncher.RdpOptions.NormalizeDriveSpec(input));
 	}
 
 	[Fact]

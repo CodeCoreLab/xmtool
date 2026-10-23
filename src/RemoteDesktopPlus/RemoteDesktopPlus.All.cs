@@ -1232,7 +1232,45 @@ public static class RdpLauncher
 	/// 缺省为 true 是刻意的：本地与远程之间复制粘贴属于基本预期，
 	/// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理（不是按 UI 默认勾选）。
 	/// </param>
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true);
+	/// <param name="LocalDriveLetter">
+	/// 要重定向的盘符。传 <see cref="AllDrivesToken"/> 表示全部驱动器（含连接后接入的）；
+	/// 传单个字母（如 "D"）表示只重定向该盘。
+	/// </param>
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true)
+	{
+		/// <summary>
+		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
+		/// `*`（全部，含之后接入的）与 `DynamicDrives`（仅之后接入的）；此处用 `*`，
+		/// 因为它同时覆盖已有盘与后插的 U 盘/移动硬盘。
+		/// </summary>
+		public const string AllDrivesToken = "*";
+
+		/// <summary>
+		/// 把盘符规范成 RDP 规范要求的 `D:\;` 形态。
+		/// 规范来源：drivestoredirect 的官方示例为 `C:\;E:\;` —— 每个盘符带尾随反斜杠，
+		/// 并以分号结尾。历史实现只写 `D:`，属于不完整语法（mstsc 可能宽松接受，
+		/// 但不符合规范，且多盘符时无法拼接）。
+		/// </summary>
+		public static string NormalizeDriveSpec(string? letter)
+		{
+			if (string.IsNullOrWhiteSpace(letter))
+			{
+				return string.Empty;
+			}
+			string trimmed = letter.Trim();
+			if (AllDrivesToken.Equals(trimmed, StringComparison.Ordinal))
+			{
+				return AllDrivesToken;
+			}
+			// 归一成单字母：接受 "D"、"D:"、"D:\" 三种输入
+			char drive = char.ToUpperInvariant(trimmed[0]);
+			if (drive < 'A' || drive > 'Z')
+			{
+				return string.Empty;
+			}
+			return $"{drive}:\\;";
+		}
+	}
 
 	private static IRdpBackend _backend = WindowsRdpBackend.Instance;
 
@@ -1340,9 +1378,18 @@ public static class RdpLauncher
 		// 故必须显式写出 i:1，不能依赖「未写就默认开」。
 		sb.AppendLine($"redirectclipboard:i:{(opt.RedirectClipboard ? 1 : 0)}");
 
-		if (opt.RedirectLocalDrive && !string.IsNullOrEmpty(opt.LocalDriveLetter))
+		// 驱动器重定向三种取值（Microsoft RDP 属性规范）：
+		//   键缺失 / 值空 → 不重定向
+		//   *            → 全部驱动器，**含连接之后接入的**（动态，比逐个枚举更彻底）
+		//   C:\;E:\;     → 指定盘符（每个盘符带尾随反斜杠，分号分隔）
+		// 注意 * 后面**不能**再跟冒号，`s:*:` 是非法语法，会导致整段重定向失效。
+		if (opt.RedirectLocalDrive)
 		{
-			sb.AppendLine($"drivestoredirect:s:{opt.LocalDriveLetter}:");
+			string driveSpec = RdpOptions.NormalizeDriveSpec(opt.LocalDriveLetter);
+			if (!string.IsNullOrEmpty(driveSpec))
+			{
+				sb.AppendLine($"drivestoredirect:s:{driveSpec}");
+			}
 		}
 		if (opt.ForceConsole)
 		{
@@ -1968,11 +2015,15 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private string resolution = "1920*1080";
 
+	/// <summary>
+	/// 盘符重定向开关。默认开启 —— 「本地与目标之间传文件」是这类工具的主要用途之一，
+	/// 默认关闭会让人先遇到「拷不了文件」再回来找开关。
+	/// </summary>
 	[ObservableProperty]
-	private bool redirectLocalDrive;
+	private bool redirectLocalDrive = true;
 
 	[ObservableProperty]
-	private string localDriveLetter = PickDefaultDriveLetter();
+	private string localDriveLetter = AllDrivesDisplayName;
 
 	[ObservableProperty]
 	private bool forceConsole;
@@ -2026,7 +2077,31 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 
 	public IReadOnlyList<string> ResolutionOptions { get; } = new string[11] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
 
-	public IReadOnlyList<string> DriveLetters { get; } = BuildDriveLetters();
+	/// <summary>
+	/// 盘符下拉选项。第一项是「全部盘符」，映射到 RDP 的 `*` 取值；
+	/// 其余为本机实际就绪的盘符字母。
+	/// 全部盘符用 `*` 而非逐个枚举的理由：`*` 是动态的，连接之后新插入的 U 盘
+	/// 也会自动重定向，而枚举只在生成 .rdp 的瞬间有效。
+	/// </summary>
+	public IReadOnlyList<string> DriveLetters { get; } = BuildDriveLetterOptions();
+
+	private static IReadOnlyList<string> BuildDriveLetterOptions()
+	{
+		List<string> options = new List<string> { AllDrivesDisplayName };
+		options.AddRange(BuildDriveLetters());
+		return options;
+	}
+
+	/// <summary>下拉里显示「全部盘符」，与协议取值 `*` 解耦，避免把 `*` 直接暴露给用户。</summary>
+	public const string AllDrivesDisplayName = "全部盘符";
+
+	/// <summary>把下拉选项翻译成协议取值（UI 显示值 → RdpOptions 输入值）。</summary>
+	private static string ToDriveSpec(string? display)
+	{
+		return AllDrivesDisplayName.Equals(display, StringComparison.Ordinal)
+			? RdpLauncher.RdpOptions.AllDrivesToken
+			: (display ?? string.Empty);
+	}
 
 	private static IReadOnlyList<string> BuildDriveLetters()
 	{
@@ -2059,11 +2134,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 		return (from c in Enumerable.Range(67, 24)
 			select ((char)c).ToString()).ToList();
-	}
-
-	private static string PickDefaultDriveLetter()
-	{
-		return BuildDriveLetters().FirstOrDefault((string l) => !string.Equals(l, "C", StringComparison.OrdinalIgnoreCase)) ?? "C";
 	}
 
 	/// <summary>
@@ -2235,7 +2305,7 @@ public partial class MainViewModel
 		var (width, height) = ParseResolution(Resolution);
 		try
 		{
-			_launcher.Launch(new RdpLauncher.RdpOptions(item.Host, item.Port, item.UserName, _crypto.Decrypt(item.EncryptedPassword), width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole, RedirectClipboard));
+			_launcher.Launch(new RdpLauncher.RdpOptions(item.Host, item.Port, item.UserName, _crypto.Decrypt(item.EncryptedPassword), width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
 		}
 		catch (Exception ex)
 		{
@@ -2418,7 +2488,7 @@ public partial class MainViewModel
 		}
 		SaveOrUpdateForm();
 		var (width, height) = ParseResolution(Resolution);
-		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, LocalDriveLetter, ForceConsole, RedirectClipboard));
+		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
 	}
 
 	private bool CanConnect()

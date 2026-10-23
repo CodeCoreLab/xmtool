@@ -325,10 +325,10 @@
                         <ComboBox Grid.Column="1" MinHeight="40" ItemsSource="{Binding ResolutionOptions}" SelectedItem="{Binding Resolution}" />
                       </Grid>
                       <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
-                        <CheckBox Content="连接本地盘符" IsChecked="{Binding RedirectLocalDrive}" />
-                        <ComboBox Width="64" Margin="10,0,22,0" ItemsSource="{Binding DriveLetters}" SelectedItem="{Binding LocalDriveLetter}" />
-                        <CheckBox Content="共享剪贴板" IsChecked="{Binding RedirectClipboard}" />
-                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" Margin="22,0,0,0" />
+                        <CheckBox Content="共享本地磁盘" IsChecked="{Binding RedirectLocalDrive}" VerticalAlignment="Center" />
+                        <ComboBox Width="96" Margin="10,0,22,0" ItemsSource="{Binding DriveLetters}" SelectedItem="{Binding LocalDriveLetter}" IsEnabled="{Binding RedirectLocalDrive}" ToolTip="选「全部盘符」可本地与远程互拷任意盘的文件（含之后插入的U盘）" />
+                        <CheckBox Content="共享剪贴板" IsChecked="{Binding RedirectClipboard}" VerticalAlignment="Center" />
+                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" Margin="22,0,0,0" VerticalAlignment="Center" />
                       </StackPanel>
                     </StackPanel>
                   </Border>
