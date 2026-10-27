@@ -1,5 +1,7 @@
 # 小马远程桌面（XiaoMa Desktop）
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-8a2be2.svg)](LICENSE)[![Releases](https://img.shields.io/badge/Releases-latest-blue.svg)](https://github.com/CodeCoreLab/xmtool/releases)[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)]
+
 轻量的 Windows 远程桌面连接管理工具。单机运行，不联网、不上云、无服务端；数据与密钥均不出本机。
 
 > 工程代号 `RemoteDesktopPlus` · 当前版本 **v1.0.0**（2026-10-20）
@@ -13,8 +15,8 @@
 | 接手维护（构建/发布/排障） | **`docs/MAINTENANCE.md`** ← 第一入口 |
 | 理解代码结构（模块/数据流/扩展） | **`docs/ARCHITECTURE.md`** |
 | 看源码 | `src/RemoteDesktopPlus/`（全量代码在 `RemoteDesktopPlus.All.cs`） |
-| 拿安装包 | 仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面 |
-| 了解依赖与许可 | 仓库根目录 `THIRD-PARTY-NOTICES.md` |
+| 拿安装包 | 仓库的 [Releases](https://github.com/CodeCoreLab/xmtool/releases) 页面 |
+| 了解依赖与许可 | [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) |
 
 ---
 
@@ -71,7 +73,7 @@ xmtool/
 
 ## 下载
 
-前往仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面下载对应版本。
+前往仓库的 [Releases](https://github.com/CodeCoreLab/xmtool/releases) 页面下载对应版本。
 
 | 版本 | 大小 | 前提 |
 |---|---|---|
@@ -97,7 +99,7 @@ xmtool/
 ## 开发
 
 ```bash
-cd xmtool/src/RemoteDesktopPlus
+cd src/RemoteDesktopPlus
 
 # 还原依赖并构建
 dotnet build -c Release
@@ -120,11 +122,11 @@ bin/Release/net8.0-windows/小马远程桌面.exe
 | Microsoft.Data.Sqlite | 8.0.10 | SQLite 访问 |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.6 | SQLite 原生库绑定 |
 
-完整许可说明见仓库根目录的 [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md)。
+完整许可说明见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
 
 ---
 
 ## 许可
 
-MIT License，见 [`LICENSE`](LICENSE)（仓库根目录）。
+MIT License，见 [`LICENSE`](LICENSE)。
 

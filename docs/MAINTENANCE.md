@@ -108,7 +108,7 @@ DOTNET="<sdk-dir>/dotnet.exe"
 ### 3.1 改代码
 
 ```bash
-cd ./repo/src/RemoteDesktopPlus
+cd ./src/RemoteDesktopPlus
 # 1) 改前备份（铁律：暂停→备份→修改→验证）
 # 2) 全部应用层代码在 RemoteDesktopPlus.All.cs 内按区段定位修改
 #    （区段注释形如 "区段 19 / 39：MainViewModel.cs → namespace ..."）
@@ -123,7 +123,7 @@ git commit -m "fix: <一句话说明>"
 ### 3.2 构建与回归（每次改动必做）
 
 ```bash
-cd ./repo/src/RemoteDesktopPlus
+cd ./src/RemoteDesktopPlus
 $DOTNET build RemoteDesktopPlus.csproj -c Release          # 期望：0 警告 0 错误
 $DOTNET test tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Release
                                                           # 期望：122/122 通过
@@ -135,7 +135,7 @@ $DOTNET test tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Rel
 
 ```bash
 # 启动产物，观察 12 秒是否存活 + 日志是否写入 + data.db 是否自动创建
-"./repo/releases/v1.0.0-20261020/小马远程桌面-v1.0.0-fdd-2.5MB.exe"
+"./releases/v1.0.0-20261020/小马远程桌面-v1.0.0-fdd-2.5MB.exe"
 # 预期：进程存活；%LOCALAPPDATA%\RemoteDesktopPlus\logs\ 出现当日日志；同目录生成 data.db
 ```
 
@@ -149,7 +149,7 @@ $DOTNET test tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Rel
 ### 4.1 构建双版本产物
 
 ```bash
-cd ./repo/src/RemoteDesktopPlus
+cd ./src/RemoteDesktopPlus
 # 精简版：框架依赖单文件（2.5MB），目标机需 .NET 8 Desktop Runtime
 $DOTNET publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained false \
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none \
@@ -167,9 +167,9 @@ $DOTNET publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained 
 
 ```bash
 # 1) 归档到 releases（版本目录 + 语义化文件名）
-mkdir -p ./repo/releases/v1.0.1-<日期>
-cp publish_final/小马远程桌面.exe      ./repo/releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-fdd-2.5MB.exe
-cp publish_standalone/小马远程桌面.exe ./repo/releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-standalone-70MB.exe
+mkdir -p ./releases/v1.0.1-<日期>
+cp publish_final/小马远程桌面.exe      ./releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-fdd-2.5MB.exe
+cp publish_standalone/小马远程桌面.exe ./releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-standalone-70MB.exe
 
 # 2) 上传到测试机固定槽位（页面链接指向这里，永不变）
 scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_final/小马远程桌面.exe \
@@ -286,7 +286,7 @@ open(P, 'w', encoding='utf-8').write(s)  # 一次性写
 纯 URL 探测不够——必须真正点击页面按钮确认拿到 PE 文件：
 
 ```bash
-cd ./repo/tools
+cd ./tools
 NODE_PATH=<node-dir>/workspace/node_modules \
   <node-dir>/versions/22.22.2-6/node.exe verify_download.js
 # 期望：两枚按钮均输出「头2字节 "MZ" ｜ PE=true ｜ 是HTML=false ｜ ✅ 有效 exe」
@@ -332,7 +332,7 @@ scp -i ~/.ssh/id_workbuddy docs/screenshots/app-main.png \
 改动弹窗后跑完整交互回归：
 
 ```bash
-cd ./repo/tools
+cd ./tools
 NODE_PATH=<node-dir>/workspace/node_modules \
   <node-dir>/versions/22.22.2-6/node.exe verify_modal.js
 # 期望：27 项全通过（打开/信息完整/选中切换/三种关闭/焦点还原/弹窗内真实下载/页脚入口）
@@ -362,7 +362,7 @@ NODE_PATH=<node-dir>/workspace/node_modules \
 ### 5.1 本地验证（改完页面必做）
 
 ```bash
-cd ./repo/tools
+cd ./tools
 NODE_PATH=<node-dir>/workspace/node_modules \
   <node-dir>/versions/22.22.2-6/node.exe verify_page.js
 # 期望：三视口均为「水平溢出 0px / 8 画布全绘制 / reveal 全入场 / 无 JS 报错」
@@ -372,7 +372,7 @@ NODE_PATH=<node-dir>/workspace/node_modules \
 
 ```bash
 # 写入本机队列 → worker 自动完成上传 + 静态部署
-"<python-venv>/Scripts/python.exe" ./repo/tools/enqueue_product_page.py
+"<python-venv>/Scripts/python.exe" ./tools/enqueue_product_page.py
 cd <worker-scripts-dir>
 "<python-venv>/Scripts/python.exe" deploy_report_worker.py
 ```
