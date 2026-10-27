@@ -27,3 +27,14 @@ publish_standalone/
 publish/
 *.import-failed
 data.db.bak
+
+## Third-party binaries: resolved via NuGet PackageReference, never vendored
+libs/
+analyzers/
+*.dll
+*.exe
+
+## Editor / merge leftovers
+*.bak
+*.orig
+*.rej

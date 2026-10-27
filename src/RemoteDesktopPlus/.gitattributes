@@ -22,7 +22,3 @@
 bin/     -diff
 obj/     -diff
 publish/ -diff
-
-# 第三方二进制依赖视为 vendored，语言统计中不计入
-libs/*.dll linguist-vendored
-analyzers/*.dll linguist-vendored

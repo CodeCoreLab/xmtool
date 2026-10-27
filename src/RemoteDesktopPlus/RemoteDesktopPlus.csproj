@@ -38,28 +38,15 @@
     <Resource Remove="tests\**" />
   </ItemGroup>
   <ItemGroup>
-    <Analyzer Include="analyzers\CommunityToolkit.Mvvm.SourceGenerators.dll" />
-    <Analyzer Include="analyzers\CommunityToolkit.Mvvm.CodeFixers.dll" />
-  </ItemGroup>
-  <ItemGroup>
-    <Reference Include="CommunityToolkit.Mvvm">
-      <HintPath>libs\CommunityToolkit.Mvvm.dll</HintPath>
-    </Reference>
-    <Reference Include="GongSolutions.WPF.DragDrop">
-      <HintPath>libs\GongSolutions.WPF.DragDrop.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Data.Sqlite">
-      <HintPath>libs\Microsoft.Data.Sqlite.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.core">
-      <HintPath>libs\SQLitePCLRaw.core.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.provider.e_sqlite3">
-      <HintPath>libs\SQLitePCLRaw.provider.e_sqlite3.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.batteries_v2">
-      <HintPath>libs\SQLitePCLRaw.batteries_v2.dll</HintPath>
-    </Reference>
+    <!--
+      依赖一律走 NuGet PackageReference，不在仓库里放二进制 DLL。
+      原因：vendored DLL 无法被 `dotnet restore` 更新、无法审计来源，
+      也会让克隆后的仓库体积膨胀、CI 缓存失效。
+      版本与原先 vendored 的 DLL 保持一致，行为不变。
+    -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="gong-wpf-dragdrop" Version="3.2.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
   </ItemGroup>
 </Project>

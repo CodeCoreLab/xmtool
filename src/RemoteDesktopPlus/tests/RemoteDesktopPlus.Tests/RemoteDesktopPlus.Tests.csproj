@@ -21,29 +21,4 @@
   <ItemGroup>
     <ProjectReference Include="..\..\RemoteDesktopPlus.csproj" />
   </ItemGroup>
-
-  <!--
-    主程序集用 HintPath 引用（非 PackageReference），依赖不会传递到本项目，
-    因此这里必须逐条重述；否则会出现 CS0012「ObservableObject 在未引用的程序集中定义」。
-  -->
-  <ItemGroup>
-    <Reference Include="CommunityToolkit.Mvvm">
-      <HintPath>..\..\libs\CommunityToolkit.Mvvm.dll</HintPath>
-    </Reference>
-    <Reference Include="GongSolutions.WPF.DragDrop">
-      <HintPath>..\..\libs\GongSolutions.WPF.DragDrop.dll</HintPath>
-    </Reference>
-    <Reference Include="Microsoft.Data.Sqlite">
-      <HintPath>..\..\libs\Microsoft.Data.Sqlite.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.core">
-      <HintPath>..\..\libs\SQLitePCLRaw.core.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.provider.e_sqlite3">
-      <HintPath>..\..\libs\SQLitePCLRaw.provider.e_sqlite3.dll</HintPath>
-    </Reference>
-    <Reference Include="SQLitePCLRaw.batteries_v2">
-      <HintPath>..\..\libs\SQLitePCLRaw.batteries_v2.dll</HintPath>
-    </Reference>
-  </ItemGroup>
 </Project>

@@ -106,7 +106,7 @@ public class Iteration2Tests
 
 		vm.ConnectItem(item);
 
-		Assert.Equal(1, launcher.LaunchCalls.Count);
+		Assert.Single(launcher.LaunchCalls);
 		Assert.True(item.LastConnectedAt > 0);
 		Assert.Equal(item.LastConnectedAt, db.LoadAll().Single().LastConnectedAt);
 		// 密码以解密后的明文传给启动器（由启动器负责安全写入凭据存储）
