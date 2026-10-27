@@ -13,23 +13,25 @@
 | 接手维护（构建/发布/排障） | **`docs/MAINTENANCE.md`** ← 第一入口 |
 | 理解代码结构（模块/数据流/扩展） | **`docs/ARCHITECTURE.md`** |
 | 看源码 | `src/RemoteDesktopPlus/`（全量代码在 `RemoteDesktopPlus.All.cs`） |
-| 拿安装包 | `releases/v1.0.0-20261020/` 或在线下载（见下） |
-| 改为产品页 | `docs/小马桌面工具-产品页.html` + `tools/` |
+| 拿安装包 | 仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面 |
+| 了解依赖与许可 | 仓库根目录 `THIRD-PARTY-NOTICES.md` |
 
 ---
 
 ## 项目空间结构
 
 ```
-E:\xmtool\xmtool\
-├── src\RemoteDesktopPlus\   源码（含 git 仓库 · 唯一代码真源）
-├── docs\                    文档（MAINTENANCE / ARCHITECTURE / 历史材料）
-├── releases\                发布产物归档（按版本分目录 · 只归档，不在此运行）
-├── run\                     运行目录（当前使用版本的副本 + data.db，可双击）
-├── tools\                   辅助脚本（合并/入队/页面验证）
-├── logs\  data\             操作日志与状态快照
-└── backup\                  历史备份（多文件版 / 更名前 / 原始二进制）
+xmtool/
+├── src/RemoteDesktopPlus/   源码（唯一代码真源）
+├── docs/                    文档（MAINTENANCE / ARCHITECTURE / 历史材料）
+├── releases/                发布产物归档（按版本分目录 · 只归档，不在此运行）
+├── run/                     运行目录（当前使用版本的副本 + data.db，可双击）
+├── tools/                   辅助脚本（合并/入队/页面验证）
+├── logs/  data/             操作日志与状态快照
+└── backup/                  历史备份（多文件版 / 更名前 / 原始二进制）
 ```
+
+> `releases/`、`run/`、`data/`、`logs/`、`backup/` 均不纳入版本控制。
 
 **`run\` 与 `releases\` 的分工**：程序把 `data.db` 建在 **exe 所在目录**
 （`AppContext.BaseDirectory`，代码层不可分离）。若直接从 `releases\v1.0.x-日期\`
@@ -69,42 +71,60 @@ E:\xmtool\xmtool\
 
 ## 下载
 
-| 版本 | 大小 | 前提 | 链接 |
-|---|---|---|---|
-| 精简版（框架依赖） | 2.5 MB | 需 .NET 8 Desktop Runtime | https://example-site.com/download/slim/小马远程桌面.exe |
-| 整合版（自包含） | 70 MB | 无（x64 Win10+） | https://example-site.com/download/full/小马远程桌面.exe |
+前往仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面下载对应版本。
 
-> 下载地址为**固定槽位**，版本更新时后端替换同名文件，页面与链接不变。
-> 历史版本留存于 `download/archive/`（服务器侧）。
+| 版本 | 大小 | 前提 |
+|---|---|---|
+| 精简版（框架依赖） | 2.5 MB | 需 .NET 8 Desktop Runtime |
+| 整合版（自包含） | 70 MB | 无（x64 Win10+） |
 
-产品页：https://example-site.com/XMTool/
+两个版本功能完全一致，只是分发方式不同：精简版需要系统已装 .NET 8 Desktop Runtime，
+整合版自带运行时、拷贝即用但体积大。
+
+> 历史版本归档在 Releases 页面的旧 tag 下。
 
 ---
 
 ## 技术栈
 
-.NET 8 · WPF · CommunityToolkit.Mvvm · Microsoft.Data.Sqlite · xUnit · GongSolutions.WPF.DragDrop
+.NET 8 · WPF · CommunityToolkit.Mvvm · Microsoft.Data.Sqlite · xUnit · gong-wpf-dragdrop
+
+依赖全部通过 NuGet `PackageReference` 声明（`RemoteDesktopPlus.csproj`），
+仓库内不含任何第三方二进制。
+
+---
+
+## 开发
+
+```bash
+cd xmtool/src/RemoteDesktopPlus
+
+# 还原依赖并构建
+dotnet build -c Release
+
+# 跑单元测试（165 项）
+dotnet test
+
+# 产物
+bin/Release/net8.0-windows/小马远程桌面.exe
+```
+
+需要 **.NET 8 SDK 或更高版本**。
+
+### 依赖清单
+
+| 包 | 版本 | 用途 |
+|---|---|---|
+| CommunityToolkit.Mvvm | 8.3.2 | MVVM 框架与源生成器 |
+| gong-wpf-dragdrop | 3.2.1 | DataGrid 拖拽排序 |
+| Microsoft.Data.Sqlite | 8.0.10 | SQLite 访问 |
+| SQLitePCLRaw.bundle_e_sqlite3 | 2.1.6 | SQLite 原生库绑定 |
+
+完整许可说明见仓库根目录的 [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md)。
 
 ---
 
 ## 许可
 
-MIT License，见 `src/RemoteDesktopPlus/LICENSE`。
-
----
-
-## 目录迁移说明（2026-10-22）
-
-本项目原位于 `E:\xmdesktop`，已按「本机工具统一管理」规范迁入 **`E:\xmtool\xmtool\`**
-（`E:\xmtool` 下每个工具一个二级目录，目录名与线上 `example-site.com` 的 slug 一致）。
-
-| 项 | 内容 |
-|---|---|
-| 线上地址 | https://example-site.com/xmtool/ |
-| 路径修正 | 10 个文件、11 处硬编码 `E:\xmdesktop` 已改为 `E:\xmtool\xmtool` |
-| 校验 | 170 个文件逐文件 md5 与原目录完全一致 |
-| git | 仓库完整，`git fsck` 无错误，工作区干净 |
-| 旧路径含义 | 本文件与 `docs/`、`tools/` 中出现的 `xmdesktop` 字样，仅存在于 `.migrate_bak/`（回滚备份）与本说明中，**不是生效路径** |
-
-统一管理规范见 `E:\xmtool\README.md`。
+MIT License，见 [`LICENSE`](LICENSE)（仓库根目录）。
 

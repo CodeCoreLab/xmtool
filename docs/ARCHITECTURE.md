@@ -368,21 +368,21 @@ ScanOnlineCommand（CanExecute = CanScan，扫描期间禁用防叠加）
   │                    ▼
   │           deploy_report_worker.py（Windows 计划任务，PT15M）
   │                    ├─ SFTP 上传 html → 测试机
-  │                    ├─ 静态部署 → /opt/aireport/web/aireport/XMTool/index.html
+  │                    ├─ 静态部署 → <站点根>/XMTool/index.html
   │                    └─ 读回 sha256 校验 + 公网探活（比对字节数）
   │
-  └─[安装包] scp → 测试机 /opt/aireport/web/aireport/download/{slim,full}/
+  └─[安装包] scp → 测试机 <站点根>/download/{slim,full}/
 
-测试机 example-test-host
-  └─ Docker workbuddy-nginx（nginx:1.27-alpine）
-       ├─ root /opt/aireport/web/aireport
+测试机 <测试机>
+  └─ Docker nginx（nginx:1.27-alpine）
+       ├─ root <站点根>
        └─ proxy_pass http://127.0.0.1:8000/aireport-api/  → uvicorn 后端
 
 访问（内网）
-  ├─ 产品页    https://example-site.com/XMTool/
-  ├─ 报告详情  https://example-site.com/#/bare/<rid>
-  ├─ 精简版    https://example-site.com/download/slim/小马远程桌面.exe
-  └─ 整合版    https://example-site.com/download/full/小马远程桌面.exe
+  ├─ 产品页    https://example.com/tools/xmtool/
+  ├─ 报告详情  https://example.com/reports/<rid>
+  ├─ 精简版    https://example.com/download/slim/小马远程桌面.exe
+  └─ 整合版    https://example.com/download/full/小马远程桌面.exe
 ```
 
 ### 关键约束（踩坑沉淀）

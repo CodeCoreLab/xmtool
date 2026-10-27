@@ -32,7 +32,7 @@ E:\xmtool\xmtool\
 │   ├── 重构收工报告.md          重构交付记录（含旧名哈希，历史留档）
 │   ├── 个人信息与溯源线索清理清单.md
 │   ├── README-工程说明.md       工程 README 副本
-│   ├── 小马桌面工具-产品页.html   对内外展示产品页（部署到 aireportdev）
+│   ├── 小马桌面工具-产品页.html   对内外展示产品页（部署到对外展示站点）
 │   └── _verify-screenshots\     产品页三视口验证截图
 │
 ├── releases\                   发布产物归档（按版本分目录）
@@ -75,7 +75,7 @@ E:\xmtool\xmtool\
 |---|---|---|
 | 代码 | `src\RemoteDesktopPlus\.git` | 一切改动经 commit，禁直接改 releases 里的产物 |
 | 发布产物 | `releases\<版本>\` | 由源码构建生成，非手工编辑 |
-| 线上分发包 | 测试机 `/opt/aireport/web/aireport/download/` | 见 §4 发布流程 |
+| 线上分发包 | 测试机 `<站点根>/download/` | 见 §4 发布流程 |
 | 运行时数据 | 用户机 exe 同目录 `data.db` | 随程序走，不进仓库 |
 | 程序日志 | `%LOCALAPPDATA%\RemoteDesktopPlus\logs\` | 30 天滚动，用户机侧 |
 
@@ -173,27 +173,27 @@ cp publish_standalone/小马远程桌面.exe ./repo/releases/v1.0.1-<日期>/小
 
 # 2) 上传到测试机固定槽位（页面链接指向这里，永不变）
 scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_final/小马远程桌面.exe \
-    root@example-test-host:/opt/aireport/web/aireport/download/slim/小马远程桌面.exe
+    deploy@<测试机>:<站点根>/download/slim/小马远程桌面.exe
 scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_standalone/小马远程桌面.exe \
-    root@example-test-host:/opt/aireport/web/aireport/download/full/小马远程桌面.exe
+    deploy@<测试机>:<站点根>/download/full/小马远程桌面.exe
 
 # 3) 历史留存（可选，带版本号）
-ssh -i ~/.ssh/id_workbuddy root@example-test-host \
-  "cp /opt/aireport/web/aireport/download/slim/小马远程桌面.exe \
-      '/opt/aireport/web/aireport/download/archive/小马远程桌面-v1.0.1-fdd.exe'"
+ssh -i ~/.ssh/id_workbuddy deploy@<测试机> \
+  "cp <站点根>/download/slim/小马远程桌面.exe \
+      '<站点根>/download/archive/小马远程桌面-v1.0.1-fdd.exe'"
 ```
 
 **下载槽位约定**（重要，勿改）：
 
 | 槽位 | URL | 用途 |
 |---|---|---|
-| 精简版 | `https://example-site.com/download/slim/小马远程桌面.exe` | 长期稳定分发 |
-| 整合版 | `https://example-site.com/download/full/小马远程桌面.exe` | 含最新改动 |
-| 界面截图 | `https://example-site.com/download/screenshots/app-main.png` | 页面 hero 展示（见 §4.7） |
+| 精简版 | `https://example.com/download/slim/小马远程桌面.exe` | 长期稳定分发 |
+| 整合版 | `https://example.com/download/full/小马远程桌面.exe` | 含最新改动 |
+| 界面截图 | `https://example.com/download/screenshots/app-main.png` | 页面 hero 展示（见 §4.7） |
 
 ### 4.2.1 产品页部署路径（免日期白名单，2026-10-20 起）
 
-产品页 URL 为 **`https://example-site.com/XMTool/`**（不带日期层）。
+产品页 URL 为 **`https://example.com/tools/xmtool/`**（不带日期层）。
 
 **实现机制**：`deploy_report_worker.py` 中新增常量
 `NO_DATE_CODES = {"XMTool"}`；命中该集合时写入 `WEB_ROOT/<code>/`，
@@ -224,9 +224,9 @@ ssh -i ~/.ssh/id_workbuddy root@example-test-host \
 
 ```bash
 # 字节数必须与源文件精确一致（防 nginx SPA fallback 假 200）
-ssh -i ~/.ssh/id_workbuddy root@example-test-host \
+ssh -i ~/.ssh/id_workbuddy deploy@<测试机> \
   "curl -s -o /dev/null -w '%{http_code} %{size_download}\n' \
-   'https://example-site.com/download/slim/%E5%B0%8F%E9%A9%AC%E8%BF%9C%E7%A8%8B%E6%A1%8C%E9%9D%A2.exe'"
+   'https://example.com/download/slim/%E5%B0%8F%E9%A9%AC%E8%BF%9C%E7%A8%8B%E6%A1%8C%E9%9D%A2.exe'"
 # 期望：200 + 字节数 == 本地文件大小
 ```
 
@@ -308,7 +308,7 @@ NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules
 #    输出：docs/screenshots/app-main.png
 # ③ 上传到固定目录（勿放日期目录，会被清理）
 scp -i ~/.ssh/id_workbuddy docs/screenshots/app-main.png \
-    root@example-test-host:/opt/aireport/web/aireport/download/screenshots/app-main.png
+    deploy@<测试机>:<站点根>/download/screenshots/app-main.png
 ```
 
 **⚠️ 三条约束**：
@@ -357,7 +357,7 @@ NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules
 
 ## 5. 产品页维护
 
-产品页 `docs\小马桌面工具-产品页.html` 是对外展示入口，部署在 aireportdev。
+产品页 `docs\小马桌面工具-产品页.html` 是对外展示入口，部署在对外展示站点。
 
 ### 5.1 本地验证（改完页面必做）
 
@@ -385,7 +385,7 @@ cd /c/Users/Administrator/.workbuddy/scripts
 3. 队列 JSON 的 `title` **必须** `<code>-<系统名> <YYYY-MM-DD>` 格式——`parse_title` 取短横线前段作
    web 树目录名，无前缀则部署被**静默跳过**。
 4. `type` 只接受 `daily/weekly/monthly/patrol/other`，其他值报「type 非法」。
-5. 访问地址：`https://example-site.com/XMTool/`（code=XMTool）。
+5. 访问地址：`https://example.com/tools/xmtool/`（code=XMTool）。
 6. 验证必须比对 **body 字节数**：nginx `try_files` 对深层路径 SPA fallback 会回吐首页（假 200）。
 
 ---
