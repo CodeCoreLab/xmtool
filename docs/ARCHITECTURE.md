@@ -363,7 +363,7 @@ ScanOnlineCommand（CanExecute = CanScan，扫描期间禁用防叠加）
   ├─ 源码改 → 构建 → 双版本 publish
   │
   ├─[产品页] tools/enqueue_product_page.py
-  │           └─ 写队列 ~/.workbuddy/scripts/.state/local_queue/local_*.json
+  │           └─ 写队列 ~/scripts/.state/local_queue/local_*.json
   │                    │
   │                    ▼
   │           deploy_report_worker.py（Windows 计划任务，PT15M）
@@ -388,7 +388,7 @@ ScanOnlineCommand（CanExecute = CanScan，扫描期间禁用防叠加）
 ### 关键约束（踩坑沉淀）
 
 1. **上传接口只入库、不做静态部署**——落盘必须经 `deploy_report_worker`。
-2. worker 队列路径 `~\.workbuddy\scripts\.state\local_queue\`（依 `SCRIPT_DIR` 推导）。
+2. worker 队列路径 `~\scripts\.state\local_queue\`（依 `SCRIPT_DIR` 推导）。
 3. 队列 `title` 必须 `<code>-<系统名> <YYYY-MM-DD>`——`parse_title` 取短横线前段作目录名，
    无前缀则部署被**静默跳过**（只入库不落盘）。
 4. `type` 仅接受 `daily/weekly/monthly/patrol/other`。

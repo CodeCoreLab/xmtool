@@ -85,17 +85,17 @@ E:\xmtool\xmtool\
 
 | 依赖 | 版本要求 | 本机现状 | 说明 |
 |---|---|---|---|
-| .NET SDK | 8.0+ | `C:\Users\Administrator\.dotnet-sdk`（8.0.426） | **本机系统只有 Runtime，SDK 装在用户目录** |
+| .NET SDK | 8.0+ | `<sdk-dir>`（8.0.426） | **本机系统只有 Runtime，SDK 装在用户目录** |
 | Windows | Win10+ x64 | — | WPF 仅 Windows |
-| Node.js（仅页面验证用） | 22+ | `C:\Users\Administrator\.workbuddy\binaries\node\` | 跑 Playwright 校验脚本 |
-| Python（仅工具脚本用） | 3.11+ | `...\binaries\python\envs\default\` | 依赖 paramiko（部署） |
+| Node.js（仅页面验证用） | 22+ | `<node-dir>` | 跑 Playwright 校验脚本 |
+| Python（仅工具脚本用） | 3.11+ | `<python-dir>` | 依赖 paramiko（部署） |
 
 **SDK 调用约定**（系统 PATH 无 dotnet，必须走全路径）：
 
 ```bash
-export DOTNET_ROOT="C:/Users/Administrator/.dotnet-sdk"
+export DOTNET_ROOT="<sdk-dir>"
 export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
-DOTNET="C:/Users/Administrator/.dotnet-sdk/dotnet.exe"
+DOTNET="<sdk-dir>/dotnet.exe"
 ```
 
 > **踩坑**：SDK 若丢失（版本目录被清理），从 `https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.426/dotnet-sdk-8.0.426-win-x64.zip`
@@ -287,8 +287,8 @@ open(P, 'w', encoding='utf-8').write(s)  # 一次性写
 
 ```bash
 cd ./repo/tools
-NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules \
-  C:/Users/Administrator/.workbuddy/binaries/node/versions/22.22.2-6/node.exe verify_download.js
+NODE_PATH=<node-dir>/workspace/node_modules \
+  <node-dir>/versions/22.22.2-6/node.exe verify_download.js
 # 期望：两枚按钮均输出「头2字节 "MZ" ｜ PE=true ｜ 是HTML=false ｜ ✅ 有效 exe」
 ```
 
@@ -333,8 +333,8 @@ scp -i ~/.ssh/id_workbuddy docs/screenshots/app-main.png \
 
 ```bash
 cd ./repo/tools
-NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules \
-  C:/Users/Administrator/.workbuddy/binaries/node/versions/22.22.2-6/node.exe verify_modal.js
+NODE_PATH=<node-dir>/workspace/node_modules \
+  <node-dir>/versions/22.22.2-6/node.exe verify_modal.js
 # 期望：27 项全通过（打开/信息完整/选中切换/三种关闭/焦点还原/弹窗内真实下载/页脚入口）
 ```
 
@@ -363,8 +363,8 @@ NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules
 
 ```bash
 cd ./repo/tools
-NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules \
-  C:/Users/Administrator/.workbuddy/binaries/node/versions/22.22.2-6/node.exe verify_page.js
+NODE_PATH=<node-dir>/workspace/node_modules \
+  <node-dir>/versions/22.22.2-6/node.exe verify_page.js
 # 期望：三视口均为「水平溢出 0px / 8 画布全绘制 / reveal 全入场 / 无 JS 报错」
 ```
 
@@ -373,15 +373,15 @@ NODE_PATH=C:/Users/Administrator/.workbuddy/binaries/node/workspace/node_modules
 ```bash
 # 写入本机队列 → worker 自动完成上传 + 静态部署
 "<python-venv>/Scripts/python.exe" ./repo/tools/enqueue_product_page.py
-cd /c/Users/Administrator/.workbuddy/scripts
+cd <worker-scripts-dir>
 "<python-venv>/Scripts/python.exe" deploy_report_worker.py
 ```
 
 **部署机制关键约束**（踩坑汇总，详见 `ARCHITECTURE.md §9`）：
 
 1. aireport **上传接口只入库、不做静态部署**；落盘必须经本机 `deploy_report_worker`。
-2. worker 队列路径是 `~\.workbuddy\scripts\.state\local_queue\`（依 `SCRIPT_DIR` 推导），
-   不是 `~\.workbuddy\.state\`。
+2. worker 队列路径是 `~\scripts\.state\local_queue\`（依 `SCRIPT_DIR` 推导），
+   不是 `~\.state\`。
 3. 队列 JSON 的 `title` **必须** `<code>-<系统名> <YYYY-MM-DD>` 格式——`parse_title` 取短横线前段作
    web 树目录名，无前缀则部署被**静默跳过**。
 4. `type` 只接受 `daily/weekly/monthly/patrol/other`，其他值报「type 非法」。
