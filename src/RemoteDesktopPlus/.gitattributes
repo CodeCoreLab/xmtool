@@ -1,0 +1,24 @@
+# 行尾统一：仓库内文本文件一律以 LF 存储与检出，消除既有 CRLF/LF 混用
+* text=auto eol=lf
+
+# 二进制文件不得做行尾转换，也不得参与 diff 文本比对
+*.ico   binary
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.bmp   binary
+*.exe   binary
+*.dll   binary
+*.pdb   binary
+*.zip   binary
+*.db    binary
+*.sqlite binary
+*.sqlite3 binary
+*.rdp   binary
+*.snk   binary
+
+# 构建输出与本地数据不参与 diff
+bin/     -diff
+obj/     -diff
+publish/ -diff

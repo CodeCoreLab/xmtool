@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <Color x:Key="CanvasColor">#FFFFFF</Color>
+  <Color x:Key="WarmCanvasColor">#F2F6FC</Color>
+  <Color x:Key="Surface1Color">#FFFFFF</Color>
+  <Color x:Key="Surface2Color">#F4F8FD</Color>
+  <Color x:Key="Surface3Color">#E7EEF7</Color>
+  <Color x:Key="SurfaceTintColor">#F9FBFE</Color>
+  <Color x:Key="BgGradTopColor">#FBFDFF</Color>
+  <Color x:Key="BgGradMidColor">#EEF4FC</Color>
+  <Color x:Key="BgGradBottomColor">#E4EEF8</Color>
+  <Color x:Key="HairlineColor">#120B1A2E</Color>
+  <Color x:Key="HairlineStrongColor">#220B1A2E</Color>
+  <Color x:Key="HairlineFocusColor">#2563EB</Color>
+  <Color x:Key="InkColor">#0B1A2E</Color>
+  <Color x:Key="InkSoftColor">#1E2A3D</Color>
+  <Color x:Key="InkMutedColor">#516074</Color>
+  <Color x:Key="InkSubtleColor">#8593A6</Color>
+  <Color x:Key="InkFaintColor">#C2CCDA</Color>
+  <Color x:Key="AccentColor">#2563EB</Color>
+  <Color x:Key="AccentHoverColor">#1D4ED8</Color>
+  <Color x:Key="AccentPressColor">#1E40AF</Color>
+  <Color x:Key="AccentSoftBgColor">#E8F0FE</Color>
+  <Color x:Key="AccentSoftTextColor">#1D4ED8</Color>
+  <Color x:Key="AccentSoftBorderColor">#3F2563EB</Color>
+  <Color x:Key="AccentGradStartColor">#2563EB</Color>
+  <Color x:Key="AccentGradEndColor">#06B6D4</Color>
+  <Color x:Key="AccentGradHoverStartColor">#1D4ED8</Color>
+  <Color x:Key="AccentGradHoverEndColor">#0891B2</Color>
+  <Color x:Key="SuccessColor">#10B981</Color>
+  <Color x:Key="SuccessSoftBgColor">#ECFDF5</Color>
+  <Color x:Key="SuccessSoftTextColor">#047857</Color>
+  <Color x:Key="WarningColor">#F59E0B</Color>
+  <Color x:Key="WarningSoftBgColor">#FEF3E2</Color>
+  <Color x:Key="WarningSoftTextColor">#B45309</Color>
+  <Color x:Key="DangerColor">#EF4444</Color>
+  <Color x:Key="DangerSoftBgColor">#FEF2F2</Color>
+  <Color x:Key="DangerSoftTextColor">#B91C1C</Color>
+  <Color x:Key="LavenderColor">#8B5CF6</Color>
+  <Color x:Key="LavenderSoftColor">#F3F0FF</Color>
+  <Color x:Key="MintColor">#10B981</Color>
+  <Color x:Key="MintSoftColor">#ECFDF5</Color>
+  <Color x:Key="PeachColor">#F97316</Color>
+  <Color x:Key="PeachSoftColor">#FFF1E6</Color>
+  <Color x:Key="RoseColor">#EC4899</Color>
+  <Color x:Key="RoseSoftColor">#FDF2F8</Color>
+  <Color x:Key="ShadowColor">#0B1A2E</Color>
+  <Color x:Key="AccentShadowColor">#2563EB</Color>
+  <SolidColorBrush x:Key="CanvasBrush" Color="{StaticResource CanvasColor}" />
+  <LinearGradientBrush x:Key="WarmCanvasBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Offset="0" Color="{StaticResource BgGradTopColor}" />
+    <GradientStop Offset="0.55" Color="{StaticResource BgGradMidColor}" />
+    <GradientStop Offset="1" Color="{StaticResource BgGradBottomColor}" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="Surface1Brush" Color="{StaticResource Surface1Color}" />
+  <SolidColorBrush x:Key="Surface2Brush" Color="{StaticResource Surface2Color}" />
+  <SolidColorBrush x:Key="Surface3Brush" Color="{StaticResource Surface3Color}" />
+  <SolidColorBrush x:Key="SurfaceTintBrush" Color="{StaticResource SurfaceTintColor}" />
+  <SolidColorBrush x:Key="HairlineBrush" Color="{StaticResource HairlineColor}" />
+  <SolidColorBrush x:Key="HairlineStrongBrush" Color="{StaticResource HairlineStrongColor}" />
+  <SolidColorBrush x:Key="InkBrush" Color="{StaticResource InkColor}" />
+  <SolidColorBrush x:Key="InkSoftBrush" Color="{StaticResource InkSoftColor}" />
+  <SolidColorBrush x:Key="InkMutedBrush" Color="{StaticResource InkMutedColor}" />
+  <SolidColorBrush x:Key="InkSubtleBrush" Color="{StaticResource InkSubtleColor}" />
+  <SolidColorBrush x:Key="InkFaintBrush" Color="{StaticResource InkFaintColor}" />
+  <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+  <SolidColorBrush x:Key="AccentHoverBrush" Color="{StaticResource AccentHoverColor}" />
+  <SolidColorBrush x:Key="AccentPressBrush" Color="{StaticResource AccentPressColor}" />
+  <SolidColorBrush x:Key="AccentSoftBgBrush" Color="{StaticResource AccentSoftBgColor}" />
+  <SolidColorBrush x:Key="AccentSoftTextBrush" Color="{StaticResource AccentSoftTextColor}" />
+  <SolidColorBrush x:Key="AccentSoftBorderBrush" Color="{StaticResource AccentSoftBorderColor}" />
+  <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Offset="0" Color="{StaticResource AccentGradStartColor}" />
+    <GradientStop Offset="1" Color="{StaticResource AccentGradEndColor}" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="AccentGradientHoverBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Offset="0" Color="{StaticResource AccentGradHoverStartColor}" />
+    <GradientStop Offset="1" Color="{StaticResource AccentGradHoverEndColor}" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="CardTopHighlightBrush" StartPoint="0.5,0" EndPoint="0.5,1">
+    <GradientStop Color="#22FFFFFF" Offset="0" />
+    <GradientStop Color="#00FFFFFF" Offset="0.4" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="GlassTopBarBrush" StartPoint="0,0" EndPoint="0,1">
+    <GradientStop Color="#F2FFFFFF" Offset="0" />
+    <GradientStop Color="#D8FFFFFF" Offset="1" />
+  </LinearGradientBrush>
+  <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource SuccessColor}" />
+  <SolidColorBrush x:Key="SuccessSoftBgBrush" Color="{StaticResource SuccessSoftBgColor}" />
+  <SolidColorBrush x:Key="SuccessSoftTextBrush" Color="{StaticResource SuccessSoftTextColor}" />
+  <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource WarningColor}" />
+  <SolidColorBrush x:Key="WarningSoftBgBrush" Color="{StaticResource WarningSoftBgColor}" />
+  <SolidColorBrush x:Key="WarningSoftTextBrush" Color="{StaticResource WarningSoftTextColor}" />
+  <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource DangerColor}" />
+  <SolidColorBrush x:Key="DangerSoftBgBrush" Color="{StaticResource DangerSoftBgColor}" />
+  <SolidColorBrush x:Key="DangerSoftTextBrush" Color="{StaticResource DangerSoftTextColor}" />
+  <SolidColorBrush x:Key="LavenderBrush" Color="{StaticResource LavenderColor}" />
+  <SolidColorBrush x:Key="LavenderSoftBrush" Color="{StaticResource LavenderSoftColor}" />
+  <SolidColorBrush x:Key="MintBrush" Color="{StaticResource MintColor}" />
+  <SolidColorBrush x:Key="MintSoftBrush" Color="{StaticResource MintSoftColor}" />
+  <SolidColorBrush x:Key="PeachBrush" Color="{StaticResource PeachColor}" />
+  <SolidColorBrush x:Key="PeachSoftBrush" Color="{StaticResource PeachSoftColor}" />
+  <SolidColorBrush x:Key="RoseBrush" Color="{StaticResource RoseColor}" />
+  <SolidColorBrush x:Key="RoseSoftBrush" Color="{StaticResource RoseSoftColor}" />
+  <SolidColorBrush x:Key="HoverOverlayBrush" Color="#0B1A2E" Opacity="0.04" />
+  <SolidColorBrush x:Key="PressOverlayBrush" Color="#0B1A2E" Opacity="0.07" />
+  <SolidColorBrush x:Key="SelectionOverlayBrush" Opacity="0.10" Color="{StaticResource AccentColor}" />
+  <RadialGradientBrush x:Key="BlobBlueBrush" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+    <GradientStop Color="#3A2563EB" Offset="0" />
+    <GradientStop Color="#002563EB" Offset="1" />
+  </RadialGradientBrush>
+  <RadialGradientBrush x:Key="BlobPurpleBrush" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+    <GradientStop Color="#3006B6D4" Offset="0" />
+    <GradientStop Color="#0006B6D4" Offset="1" />
+  </RadialGradientBrush>
+  <RadialGradientBrush x:Key="BlobMintBrush" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+    <GradientStop Color="#2810B981" Offset="0" />
+    <GradientStop Color="#0010B981" Offset="1" />
+  </RadialGradientBrush>
+  <RadialGradientBrush x:Key="BlobRoseBrush" GradientOrigin="0.5,0.5" Center="0.5,0.5" RadiusX="0.5" RadiusY="0.5">
+    <GradientStop Color="#24F97316" Offset="0" />
+    <GradientStop Color="#00F97316" Offset="1" />
+  </RadialGradientBrush>
+  <LinearGradientBrush x:Key="IconBoxBlueBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#E8F0FE" Offset="0" />
+    <GradientStop Color="#D2E2FD" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="IconBoxPeachBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#FFF1E6" Offset="0" />
+    <GradientStop Color="#FFE0CB" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="IconBoxMintBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#ECFDF5" Offset="0" />
+    <GradientStop Color="#CFF5E2" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="IconBoxLavenderBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#F3F0FF" Offset="0" />
+    <GradientStop Color="#E0D8FF" Offset="1" />
+  </LinearGradientBrush>
+  <LinearGradientBrush x:Key="IconBoxRoseBrush" StartPoint="0,0" EndPoint="1,1">
+    <GradientStop Color="#FDF2F8" Offset="0" />
+    <GradientStop Color="#FAD9EA" Offset="1" />
+  </LinearGradientBrush>
+</ResourceDictionary>

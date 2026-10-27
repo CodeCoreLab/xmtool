@@ -1,0 +1,52 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>小马远程桌面</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <OutputType>WinExe</OutputType>
+    <UseWPF>True</UseWPF>
+    <UseWindowsForms>True</UseWindowsForms>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <PlatformTarget>x64</PlatformTarget>
+    <Nullable>annotations</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>11.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationIcon>app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RootNamespace />
+    <!--
+      WFAC010：WinForms 分析器要求把高 DPI 从 app.manifest 挪到 ApplicationHighDpiMode。
+      本项目是 WPF 主体，PerMonitorV2 只能由 manifest 提供（ApplicationHighDpiMode 走的是
+      WinForms 的运行时路径，对 WPF 窗口不生效）。WinForms 仅用于托盘 NotifyIcon，
+      不涉及任何 Form 的高 DPI 布局，故保留 manifest 写法并在此显式静默该告警。
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="app.ico" />
+  </ItemGroup>
+  <!-- 测试工程位于 tests\ 子目录；必须显式排除，否则 SDK 默认通配会把测试代码编进主程序集 -->
+  <ItemGroup>
+    <Compile Remove="tests\**" />
+    <None Remove="tests\**" />
+    <Page Remove="tests\**" />
+    <ApplicationDefinition Remove="tests\**" />
+    <Resource Remove="tests\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <!--
+      依赖一律走 NuGet PackageReference，不在仓库里放二进制 DLL。
+      原因：vendored DLL 无法被 `dotnet restore` 更新、无法审计来源，
+      也会让克隆后的仓库体积膨胀、CI 缓存失效。
+      版本与原先 vendored 的 DLL 保持一致，行为不变。
+    -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="gong-wpf-dragdrop" Version="3.2.1" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
+  </ItemGroup>
+</Project>
