@@ -72,6 +72,21 @@ using System.Runtime.CompilerServices;
 /// </summary>
 public sealed class ConnectionFormResult : INotifyPropertyChanged
 {
+	/// <summary>主机（IP / 域名）最大长度。</summary>
+	public const int MaxHostLength = 255;
+
+	/// <summary>登录账号最大长度。</summary>
+	public const int MaxUserNameLength = 128;
+
+	/// <summary>密码最大长度。</summary>
+	public const int MaxPasswordLength = 1024;
+
+	/// <summary>备注最大长度。</summary>
+	public const int MaxRemarkLength = 2000;
+
+	/// <summary>分组名最大长度。</summary>
+	public const int MaxGroupNameLength = 64;
+
 	private string _host = string.Empty;
 
 	private int _port = 3389;
@@ -160,6 +175,35 @@ public sealed class ConnectionFormResult : INotifyPropertyChanged
 	private string _groupName = string.Empty;
 
 	public event PropertyChangedEventHandler? PropertyChanged;
+
+	/// <summary>
+	/// 校验字段长度是否越界。返回 null 表示通过；否则返回第一条错误信息。
+	/// 上限的作用：防止异常长输入撑爆 SQLite 记录、并把不可信内容带进 .rdp / 凭据存储。
+	/// </summary>
+	public string? ValidateLengths()
+	{
+		if ((Host ?? string.Empty).Length > MaxHostLength)
+		{
+			return "IP/域名长度不能超过 " + MaxHostLength + " 个字符。";
+		}
+		if ((UserName ?? string.Empty).Length > MaxUserNameLength)
+		{
+			return "登录账号长度不能超过 " + MaxUserNameLength + " 个字符。";
+		}
+		if ((Password ?? string.Empty).Length > MaxPasswordLength)
+		{
+			return "登录密码长度不能超过 " + MaxPasswordLength + " 个字符。";
+		}
+		if ((Remark ?? string.Empty).Length > MaxRemarkLength)
+		{
+			return "备注长度不能超过 " + MaxRemarkLength + " 个字符。";
+		}
+		if ((GroupName ?? string.Empty).Length > MaxGroupNameLength)
+		{
+			return "分组名长度不能超过 " + MaxGroupNameLength + " 个字符。";
+		}
+		return null;
+	}
 
 	private void Notify([CallerMemberName] string? name = null)
 	{
@@ -275,6 +319,12 @@ public static class SettingKeys
 	public const string LaunchPasswordHash = "launch.password.hash";
 
 	public const string LaunchPasswordSalt = "launch.password.salt";
+
+	/// <summary>启动密码连续错误次数（持久化，防止重启绕过计数）。</summary>
+	public const string LaunchPasswordFailCount = "launch.password.fail_count";
+
+	/// <summary>启动密码锁定截止时间（Unix 秒，UTC）。</summary>
+	public const string LaunchPasswordLockedUntil = "launch.password.locked_until";
 
 	public const string MasterKeyVerifier = "master.key.verifier";
 
@@ -467,6 +517,14 @@ public sealed class DatabaseService
 	public void Initialize()
 	{
 		using ConnectionScope connectionScope = AcquireConnection();
+		// WAL + busy_timeout：后台 3 秒轮询、批量在线检测、用户编辑保存、导入导出
+		// 会并发读写同一文件。默认的 rollback journal 模式在此场景下直接抛
+		// "database is locked"，且该异常会沿 Dispatcher 冒泡导致 GUI 闪退。
+		using (SqliteCommand pragma = connectionScope.CreateCommand(
+			"PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000; PRAGMA synchronous=NORMAL;"))
+		{
+			pragma.ExecuteNonQuery();
+		}
 		using SqliteCommand sqliteCommand = connectionScope.CreateCommand("CREATE TABLE IF NOT EXISTS Connections (\r\n    Id              INTEGER PRIMARY KEY AUTOINCREMENT,\r\n    Host            TEXT NOT NULL,\r\n    Port            INTEGER NOT NULL DEFAULT 3389,\r\n    UserName        TEXT NOT NULL DEFAULT '',\r\n    Password        TEXT NOT NULL DEFAULT '',\r\n    Remark          TEXT NOT NULL DEFAULT '',\r\n    SortOrder       INTEGER NOT NULL DEFAULT 0\r\n);\r\n\r\nCREATE TABLE IF NOT EXISTS Settings (\r\n    Key             TEXT PRIMARY KEY,\r\n    Value           TEXT NOT NULL DEFAULT ''\r\n);");
 		sqliteCommand.ExecuteNonQuery();
 		ApplyMigrations(connectionScope);
@@ -945,11 +1003,13 @@ public sealed class CryptoService
 	}
 
 	/// <summary>设置/修改主密码：全量重加密所有条目，事务内完成，失败回滚。</summary>
+	/// <remarks>
+	/// 任一条目解密失败即整批中止并抛异常：继续执行会用空串覆盖该条目的真实密码，
+	/// 造成不可逆的数据丢失。
+	/// </remarks>
 	public void SetMasterPassword(string newPassword, IEnumerable<ConnectionItem> existingItems)
 	{
-		var source = existingItems
-			.Select(item => (Item: item, OriginalCipher: item.EncryptedPassword, Plain: Decrypt(item.EncryptedPassword)))
-			.ToList();
+		var source = CollectDecryptableItems(existingItems);
 		byte[] salt = RandomNumberGenerator.GetBytes(SaltBytes);
 		byte[] key = DeriveKey(newPassword, salt);
 		string verifier = AesGcmEncrypt("OK", key);
@@ -986,15 +1046,16 @@ public sealed class CryptoService
 	}
 
 	/// <summary>移除主密码：回退为 DPAPI 形态，事务内完成，失败回滚。</summary>
+	/// <remarks>
+	/// 与 <see cref="SetMasterPassword"/> 同理：任一条目解密失败即整批中止。
+	/// </remarks>
 	public void RemoveMasterPassword(IEnumerable<ConnectionItem> existingItems)
 	{
 		if (!HasMasterKey)
 		{
 			throw new InvalidOperationException("请先解锁。");
 		}
-		var source = existingItems
-			.Select(item => (Item: item, OriginalCipher: item.EncryptedPassword, Plain: Decrypt(item.EncryptedPassword)))
-			.ToList();
+		var source = CollectDecryptableItems(existingItems);
 		var newCiphers = source
 			.Select(s => (s.Item, s.OriginalCipher, NewCipher: PrefixDpapi + DpapiEncrypt(s.Plain)))
 			.ToList();
@@ -1040,11 +1101,58 @@ public sealed class CryptoService
 	}
 
 	/// <summary>解密失败一律返回空串，不抛出（调用方无需处理损坏密文）。</summary>
+	/// <remarks>
+	/// 注意：返回空串有歧义——「密码本就为空」与「解密失败」无法区分。
+	/// 需要区分二者的场景（主密码批量重加密等会写回数据的路径）必须改用
+	/// <see cref="TryDecrypt"/>，否则会用空串覆盖真实密码，造成不可逆的数据丢失。
+	/// </remarks>
 	public string Decrypt(string cipher)
 	{
+		return TryDecrypt(cipher, out string plain) ? plain : string.Empty;
+	}
+
+	/// <summary>
+	/// 收集可解密条目：任一条目解密失败即抛异常中止整批操作。
+	/// 批量重加密路径必须先过这一关，否则失败条目会被空串覆盖，数据不可逆丢失。
+	/// </summary>
+	public List<(ConnectionItem Item, string OriginalCipher, string Plain)> CollectDecryptableItems(IEnumerable<ConnectionItem> existingItems)
+	{
+		var result = new List<(ConnectionItem, string, string)>();
+		var failed = new List<string>();
+		foreach (var item in existingItems)
+		{
+			string cipher = item.EncryptedPassword ?? string.Empty;
+			if (TryDecrypt(cipher, out string plain))
+			{
+				result.Add((item, cipher, plain));
+			}
+			else
+			{
+				failed.Add(string.IsNullOrEmpty(item.Host) ? "(无主机名)" : item.Host);
+			}
+		}
+		if (failed.Count > 0)
+		{
+			throw new InvalidOperationException(
+				"有 " + failed.Count + " 条记录无法解密，操作已取消（未做任何修改）：" +
+				string.Join("、", failed.Take(5)) +
+				(failed.Count > 5 ? " 等" : string.Empty) +
+				"。常见原因：主密码已变更、DPAPI 凭据因换机/换用户失效。");
+		}
+		return result;
+	}
+
+	/// <summary>
+	/// 可失败语义的解密：成功返回 true 并输出明文，失败返回 false。
+	/// 用于「解不开就整批中止」的数据写回路径，避免静默用空串覆盖密文。
+	/// </summary>
+	public bool TryDecrypt(string cipher, out string plain)
+	{
+		plain = string.Empty;
 		if (string.IsNullOrEmpty(cipher))
 		{
-			return string.Empty;
+			// 空密文视为「本就没有密码」，不是失败。
+			return true;
 		}
 		try
 		{
@@ -1052,19 +1160,24 @@ public sealed class CryptoService
 			{
 				if (_masterKey == null)
 				{
-					return string.Empty;
+					// 主密码形态但未解锁：无法解密，判失败。
+					return false;
 				}
-				return AesGcmDecrypt(cipher.Substring(PrefixMaster.Length), _masterKey);
+				plain = AesGcmDecrypt(cipher.Substring(PrefixMaster.Length), _masterKey);
+				return true;
 			}
 			if (cipher.StartsWith(PrefixDpapi, StringComparison.Ordinal))
 			{
-				return DpapiDecrypt(cipher.Substring(PrefixDpapi.Length));
+				plain = DpapiDecrypt(cipher.Substring(PrefixDpapi.Length));
+				return true;
 			}
-			return DpapiDecrypt(cipher);
+			plain = DpapiDecrypt(cipher);
+			return true;
 		}
 		catch
 		{
-			return string.Empty;
+			plain = string.Empty;
+			return false;
 		}
 	}
 
@@ -1167,7 +1280,8 @@ public static class CredentialStore
 {
 	private const int CRED_TYPE_GENERIC = 1;
 
-	private const int CRED_PERSIST_LOCAL_MACHINE = 2;
+	/// <summary>凭据仅在当前登录会话内有效，注销即失效（不落盘为长期凭据）。</summary>
+	private const int CRED_PERSIST_SESSION = 1;
 
 	private const int ERROR_NOT_FOUND = 1168;
 
@@ -1245,7 +1359,7 @@ public static class CredentialStore
 				Comment = IntPtr.Zero,
 				CredentialBlobSize = blob.Length,
 				CredentialBlob = blobPtr,
-				Persist = CRED_PERSIST_LOCAL_MACHINE,
+				Persist = CRED_PERSIST_SESSION,
 				AttributeCount = 0,
 				Attributes = IntPtr.Zero,
 				TargetAlias = IntPtr.Zero,
@@ -1318,7 +1432,7 @@ namespace RemoteDesktopPlus.Services
 public interface IRdpBackend
 {
 	/// <summary>把凭据写入系统凭据存储（等价于 cmdkey /generic，但不经命令行）。</summary>
-	void StoreCredential(string target, string userName, string password);
+	bool StoreCredential(string target, string userName, string password);
 
 	/// <summary>从系统凭据存储删除指定 target 的凭据。</summary>
 	void DeleteCredential(string target);
@@ -1351,9 +1465,9 @@ public sealed class WindowsRdpBackend : IRdpBackend
 		return "TERMSRV/" + host;
 	}
 
-	public void StoreCredential(string target, string userName, string password)
+	public bool StoreCredential(string target, string userName, string password)
 	{
-		CredentialStore.WriteGeneric(target, userName, password);
+		return CredentialStore.WriteGeneric(target, userName, password);
 	}
 
 	public void DeleteCredential(string target)
@@ -1498,9 +1612,10 @@ public static class RdpLauncher
 	{
 		string target = WindowsRdpBackend.BuildTarget(opt.Host);
 		bool hasCredential = !string.IsNullOrEmpty(opt.UserName);
-		if (hasCredential)
+		if (hasCredential && !_backend.StoreCredential(target, opt.UserName, opt.Password))
 		{
-			_backend.StoreCredential(target, opt.UserName, opt.Password);
+			// 凭据写入失败不应静默：mstsc 会退化为弹窗询问密码。
+			Log.Error("RDP 凭据写入失败，mstsc 将改为交互式询问密码: " + target);
 		}
 
 		string rdpPath = WriteRdpFile(opt);
@@ -1562,8 +1677,8 @@ public static class RdpLauncher
 	public static string BuildRdpContent(RdpOptions opt)
 	{
 		StringBuilder sb = new StringBuilder();
-		sb.AppendLine($"full address:s:{opt.Host}:{opt.Port}");
-		sb.AppendLine($"username:s:{opt.UserName}");
+		sb.AppendLine($"full address:s:{SanitizeRdpValue(opt.Host)}:{opt.Port}");
+		sb.AppendLine($"username:s:{SanitizeRdpValue(opt.UserName)}");
 		sb.AppendLine("prompt for credentials:i:0");
 		sb.AppendLine("authentication level:i:0");
 		sb.AppendLine("enablecredsspsupport:i:1");
@@ -1601,6 +1716,35 @@ public static class RdpLauncher
 		if (opt.ForceConsole)
 		{
 			sb.AppendLine("connect to console:i:1");
+		}
+		return sb.ToString();
+	}
+
+	/// <summary>
+	/// 清洗写入 .rdp 的用户可控值。
+	/// .rdp 是 CRLF 分隔的 <c>key:type:value</c> 文本格式，用户输入里的换行会让后续内容
+	/// 被当成新的配置项解析——例如把主机名填成 <c>host\r\nadministrative mode:i:1</c>
+	/// 就能在导出的文件里塞进任意 mstsc 设置。因此所有用户可控值必须剔除 CR/LF。
+	/// </summary>
+	public static string SanitizeRdpValue(string? value)
+	{
+		if (string.IsNullOrEmpty(value))
+		{
+			return string.Empty;
+		}
+		// 剔除 CR/LF（切断配置项注入），并去掉其余控制字符（避免 mstsc 解析异常）。
+		StringBuilder sb = new StringBuilder(value.Length);
+		foreach (char c in value)
+		{
+			if (c == '\r' || c == '\n')
+			{
+				continue;
+			}
+			if (char.IsControl(c))
+			{
+				continue;
+			}
+			sb.Append(c);
 		}
 		return sb.ToString();
 	}
@@ -1828,24 +1972,44 @@ public sealed class DbFileBackupFormat : IBackupFormat
 			throw new FileNotFoundException("导入的数据库文件不存在", sourcePath);
 		}
 		ValidateSqliteHeader(sourcePath);
+
 		string dbPath = db.DbPath;
 		string backup = dbPath + ".bak";
-		if (File.Exists(dbPath))
-		{
-			File.Copy(dbPath, backup, overwrite: true);
-		}
-		GC.Collect();
-		GC.WaitForPendingFinalizers();
-		SqliteConnection.ClearAllPools();
+		// 导入不是「直接覆盖」：先把源文件复制到临时文件做完整性与表结构校验，
+		// 通过后才原子替换正式库。直接覆盖时，若源文件是损坏的或结构不符，
+		// 用户会连同原库一起丢失，且无法回滚。
+		string staging = dbPath + ".import-staging";
+		StagingFileGuard guard = new StagingFileGuard(staging, dbPath + ".new");
+		bool replaced = false;
 		try
 		{
-			File.Copy(sourcePath, dbPath, overwrite: true);
+			// 阶段一：暂存 + 校验。此阶段任何失败都不动正式库，无需回滚。
+			File.Copy(sourcePath, staging, overwrite: true);
+			ValidateStagedDatabase(staging);
+
+			// 阶段二：备份现库，然后原子替换。
+			if (File.Exists(dbPath))
+			{
+				File.Copy(dbPath, backup, overwrite: true);
+			}
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			SqliteConnection.ClearAllPools();
+			AtomicReplace(staging, dbPath);
+			replaced = true;
 			db.ReinitializeAfterImport();
 			Log.Info("Backup import ok: " + sourcePath);
 		}
 		catch (Exception ex)
 		{
-			// 回滚失败绝不能静默：用户可能以为数据已还原，实际库文件状态未知。
+			if (!replaced)
+			{
+				// 正式库尚未被触碰：校验/复制阶段失败，直接向上抛即可，原数据完好。
+				Log.Error("Backup import aborted before replacing the live database: " + sourcePath, ex);
+				throw;
+			}
+			// 已替换后失败：回滚。回滚失败绝不能静默——用户可能以为数据已还原，
+			// 实际库文件状态未知，故写哨兵文件供下次启动告警。
 			try
 			{
 				SqliteConnection.ClearAllPools();
@@ -1858,7 +2022,6 @@ public sealed class DbFileBackupFormat : IBackupFormat
 			}
 			catch (Exception rollbackEx)
 			{
-				// 哨兵文件 + Error 日志：下次启动由 App 检测并向用户告警。
 				Log.Error("Backup import rollback FAILED - database may be corrupted: " + dbPath, rollbackEx);
 				try
 				{
@@ -1872,6 +2035,86 @@ public sealed class DbFileBackupFormat : IBackupFormat
 				}
 			}
 			throw;
+		}
+		finally
+		{
+			guard.Dispose();
+		}
+	}
+
+	/// <summary>导入前的强校验：完整性 + 必需表结构。任一不满足即拒绝导入。</summary>
+	private static void ValidateStagedDatabase(string path)
+	{
+		using SqliteConnection connection = new SqliteConnection("Data Source=" + path + ";Mode=ReadOnly;");
+		connection.Open();
+		using (SqliteCommand integrity = connection.CreateCommand())
+		{
+			integrity.CommandText = "PRAGMA integrity_check;";
+			object? result = integrity.ExecuteScalar();
+			string verdict = result?.ToString() ?? string.Empty;
+			if (!string.Equals(verdict, "ok", StringComparison.OrdinalIgnoreCase))
+			{
+				throw new InvalidDataException("导入文件数据库完整性检查未通过：" + verdict + "。已拒绝导入，原数据未受影响。");
+			}
+		}
+		foreach (string table in new[] { "Connections", "Settings" })
+		{
+			using SqliteCommand cmd = connection.CreateCommand();
+			cmd.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=$t;";
+			cmd.Parameters.AddWithValue("$t", table);
+			long count = Convert.ToInt64(cmd.ExecuteScalar() ?? 0L);
+			if (count == 0)
+			{
+				throw new InvalidDataException("导入文件缺少必需的数据表 " + table + "，不是本程序导出的备份。已拒绝导入，原数据未受影响。");
+			}
+		}
+	}
+
+	/// <summary>原子替换：先删旧文件再改名（同卷 rename 为原子操作）。</summary>
+	private static void AtomicReplace(string stagingPath, string destinationPath)
+	{
+		string destDirectory = Path.GetDirectoryName(destinationPath) ?? AppContext.BaseDirectory;
+		string destFileName = Path.GetFileName(destinationPath);
+		string tempDestination = Path.Combine(destDirectory, destFileName + ".new");
+		File.Copy(stagingPath, tempDestination, overwrite: true);
+		// File.Replace 需要目标已存在；不存在时退化为 delete + move。
+		if (File.Exists(destinationPath))
+		{
+			File.Replace(tempDestination, destinationPath, null, ignoreMetadataErrors: true);
+		}
+		else
+		{
+			File.Delete(destinationPath);
+			File.Move(tempDestination, destinationPath);
+		}
+	}
+
+	/// <summary>临时文件守卫：无论成功失败都删除暂存文件。</summary>
+	private sealed class StagingFileGuard : IDisposable
+	{
+		private readonly string[] _paths;
+
+		public StagingFileGuard(params string[] paths)
+		{
+			_paths = paths;
+		}
+
+		public void Dispose()
+		{
+			foreach (string path in _paths)
+			{
+				try
+				{
+					if (File.Exists(path))
+					{
+						File.Delete(path);
+					}
+				}
+				catch
+				{
+					// 清理失败不应影响主流程。
+				}
+			}
 		}
 	}
 
@@ -1965,23 +2208,49 @@ public static class RdpServerService
 		registryKey.SetValue("fDenyTSConnections", (!enabled) ? 1 : 0, RegistryValueKind.DWord);
 	}
 
+	/// <summary>
+	/// 修改远程桌面端口，按「先加新规则 → 再改注册表 → 最后删旧规则」的顺序做事务式变更。
+	/// 任一步失败即回滚到原状态，避免出现「注册表已改但防火墙没放行 → 连不上」的中间态。
+	/// </summary>
 	public static void SetPort(int port)
 	{
-		if ((port < 1 || port > 65535) ? true : false)
+		if (port < 1 || port > 65535)
 		{
 			throw new ArgumentOutOfRangeException("port", "端口范围必须在 1 到 65535 之间。");
 		}
 		int currentPort = GetCurrentPort();
-		using (RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp", writable: true) ?? throw new InvalidOperationException("无法打开 RDP-Tcp 注册表项，请确认以管理员身份运行。"))
+		if (currentPort == port)
 		{
+			// 端口未变：仅确保规则存在，避免重复执行注册表写入。
+			if (!AddFirewallRule(port))
+			{
+				throw new InvalidOperationException("防火墙规则创建失败，端口未做变更。请确认以管理员身份运行且 Windows 防火墙服务可用。");
+			}
+			RemoveOurFirewallRules(port);
+			return;
+		}
+
+		// 步骤 1：先为新端口放行。若失败则不触碰注册表，原状态保持不变。
+		if (!AddFirewallRule(port))
+		{
+			throw new InvalidOperationException("新端口 " + port + " 的防火墙规则创建失败，已放弃端口变更（仍为 " + currentPort + "）。请确认以管理员身份运行且 Windows 防火墙服务可用。");
+		}
+
+		// 步骤 2：改注册表。失败则回滚防火墙（删除刚加的新规则），旧规则不动。
+		try
+		{
+			using RegistryKey registryKey = Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp", writable: true) ?? throw new InvalidOperationException("无法打开 RDP-Tcp 注册表项，请确认以管理员身份运行。");
 			registryKey.SetValue("PortNumber", port, RegistryValueKind.DWord);
 		}
-		RemoveOurFirewallRules(port);
-		if (currentPort != port)
+		catch (Exception ex)
 		{
-			RemoveFirewallRuleForPort(currentPort);
+			RemoveFirewallRuleForPort(port);
+			throw new InvalidOperationException("写入端口注册表失败，已回滚防火墙规则，端口仍为 " + currentPort + "。原因：" + ex.Message, ex);
 		}
-		AddFirewallRule(port);
+
+		// 步骤 3：新端口已生效，最后清理其余旧规则（含旧端口）。
+		RemoveOurFirewallRules(port);
+		RemoveFirewallRuleForPort(currentPort);
 	}
 
 	public static bool IsPortListening(int port)
@@ -2003,17 +2272,20 @@ public static class RdpServerService
 		return false;
 	}
 
-	private static void AddFirewallRule(int port)
+	/// <summary>为指定端口重建入站放行规则。返回是否真正建成。</summary>
+	private static bool AddFirewallRule(int port)
 	{
-		string text = $"{"RemoteDesktopPlus-RDP-"}{port}";
+		string text = FirewallRulePrefix + port;
+		// 先删同名旧规则再新增，保证幂等。
 		RunNetsh("advfirewall", "firewall", "delete", "rule", "name=" + text);
-		RunNetsh("advfirewall", "firewall", "add", "rule", "name=" + text, "dir=in", "action=allow", "protocol=TCP", $"localport={port}");
+		return RunNetsh("advfirewall", "firewall", "add", "rule", "name=" + text, "dir=in", "action=allow", "protocol=TCP", $"localport={port}");
 	}
 
-	private static void RemoveFirewallRuleForPort(int port)
+	/// <summary>删除指定端口的入站放行规则。返回是否删除成功（规则不存在也视为成功）。</summary>
+	private static bool RemoveFirewallRuleForPort(int port)
 	{
-		string text = $"{"RemoteDesktopPlus-RDP-"}{port}";
-		RunNetsh("advfirewall", "firewall", "delete", "rule", "name=" + text);
+		string text = FirewallRulePrefix + port;
+		return RunNetsh("advfirewall", "firewall", "delete", "rule", "name=" + text);
 	}
 
 	private static void RemoveOurFirewallRules(int exceptPort)
@@ -2055,7 +2327,11 @@ public static class RdpServerService
 		}
 	}
 
-	private static void RunNetsh(params string[] args)
+	/// <summary>
+	/// 执行 netsh 并返回是否成功。旧实现吞掉退出码，导致「防火墙规则没加上」这类失败
+	/// 完全无感；这里把退出码与 stderr 纳入判断，失败时记日志。
+	/// </summary>
+	private static bool RunNetsh(params string[] args)
 	{
 		ProcessStartInfo processStartInfo = new ProcessStartInfo
 		{
@@ -2072,10 +2348,36 @@ public static class RdpServerService
 		try
 		{
 			using Process process = Process.Start(processStartInfo);
-			process?.WaitForExit(5000);
+			if (process == null)
+			{
+				return false;
+			}
+			string stdout = process.StandardOutput.ReadToEnd();
+			string stderr = process.StandardError.ReadToEnd();
+			if (!process.WaitForExit(5000))
+			{
+				try
+				{
+					process.Kill();
+				}
+				catch
+				{
+				}
+				Log.Error("netsh 执行超时: " + string.Join(" ", args));
+				return false;
+			}
+			if (process.ExitCode != 0)
+			{
+				Log.Error("netsh 退出码 " + process.ExitCode + ": " + string.Join(" ", args)
+					+ " | stdout=" + stdout.Trim() + " | stderr=" + stderr.Trim());
+				return false;
+			}
+			return true;
 		}
-		catch
+		catch (Exception ex)
 		{
+			Log.Error("netsh 执行异常: " + string.Join(" ", args), ex);
+			return false;
 		}
 	}
 }
@@ -3248,7 +3550,16 @@ public partial class MainViewModel
 			if (HasMasterPassword)
 			{
 				// 导入的库可能换了主密码，必须立刻要求解锁，否则读出来全是空串。
-				_dialogs.ShowMasterPassword(MasterPasswordPurpose.Unlock);
+				// 解锁失败/被取消时必须阻断编辑：此时任何一次保存都会用空串覆盖真实密码。
+				if (!_dialogs.ShowMasterPassword(MasterPasswordPurpose.Unlock))
+				{
+					_dialogs.ShowMessage(
+						"导入的数据使用主密码加密，但未能解锁主密码。\n\n" +
+						"已阻止进入编辑界面——在解锁前保存任何记录都会用空密码覆盖原有密码，造成数据丢失。\n" +
+						"请重新启动程序并输入正确的主密码；如果原主密码已遗忘，原数据无法恢复。",
+						"主密码未解锁", DialogKind.Warning);
+					return;
+				}
 			}
 			ReloadConnections();
 			_dialogs.ShowMessage("导入成功。", "提示");
@@ -3303,10 +3614,11 @@ public partial class LoginWindow : Window
 {
 	private const int MaxFailures = 5;
 
+	private const int BaseLockMinutes = 1;
+
 	private readonly DatabaseService _db;
 	private readonly CryptoService _crypto;
 
-	private int _failures;
 
 	public LoginWindow(DatabaseService? db = null, CryptoService? crypto = null)
 	{
@@ -3318,6 +3630,40 @@ public partial class LoginWindow : Window
 		{
 			PwdBox.Focus();
 		};
+	}
+
+	/// <summary>
+	/// 查询启动密码锁定剩余秒数（0 表示未锁定）。失败计数与锁定截止时间持久化在 Settings 表，
+	/// 因此关闭程序再重开无法绕过失败次数限制。
+	/// </summary>
+	public static int GetLockRemainingSeconds(DatabaseService db)
+	{
+		string raw = db.GetSetting(SettingKeys.LaunchPasswordLockedUntil) ?? string.Empty;
+		if (!long.TryParse(raw, out long untilUnix))
+		{
+			return 0;
+		}
+		long now = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+		long remain = untilUnix - now;
+		return remain > 0 ? (int)System.Math.Min(remain, int.MaxValue) : 0;
+	}
+
+	/// <summary>清除失败计数与锁定状态（登录成功或重设密码后调用）。</summary>
+	public static void ResetFailures(DatabaseService db)
+	{
+		db.DeleteSetting(SettingKeys.LaunchPasswordFailCount);
+		db.DeleteSetting(SettingKeys.LaunchPasswordLockedUntil);
+	}
+
+	private int LoadFailCount()
+	{
+		string raw = _db.GetSetting(SettingKeys.LaunchPasswordFailCount) ?? string.Empty;
+		return int.TryParse(raw, out int count) && count > 0 ? count : 0;
+	}
+
+	private void SaveFailCount(int count)
+	{
+		_db.SetSetting(SettingKeys.LaunchPasswordFailCount, count.ToString());
 	}
 
 	private void Ok_Click(object sender, RoutedEventArgs e)
@@ -3341,25 +3687,42 @@ public partial class LoginWindow : Window
 
 	private void TryLogin()
 	{
+		int locked = GetLockRemainingSeconds(_db);
+		if (locked > 0)
+		{
+			PwdBox.Clear();
+			MessageBox.Show($"启动密码已被锁定，请 {System.Math.Max(1, (int)System.Math.Ceiling(locked / 60.0))} 分钟后重试。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+			base.DialogResult = false;
+			Close();
+			return;
+		}
+
 		string hashB = _db.GetSetting(SettingKeys.LaunchPasswordHash) ?? string.Empty;
 		string saltB = _db.GetSetting(SettingKeys.LaunchPasswordSalt) ?? string.Empty;
 		if (CryptoService.VerifyLaunchPassword(PwdBox.Password, hashB, saltB))
 		{
+			ResetFailures(_db);
 			base.DialogResult = true;
 			Close();
 			return;
 		}
-		_failures++;
+
+		int failures = LoadFailCount() + 1;
+		SaveFailCount(failures);
 		PwdBox.Clear();
-		if (_failures >= MaxFailures)
+		if (failures >= MaxFailures)
 		{
-			MessageBox.Show("密码错误次数过多，程序将退出。", "提示", MessageBoxButton.OK, MessageBoxImage.Hand);
+			// 锁定时长随失败轮次递增（1/2/3… 分钟），上限 60 分钟。
+			int lockMinutes = System.Math.Min(60, BaseLockMinutes * (failures / MaxFailures));
+			long until = System.DateTimeOffset.UtcNow.ToUnixTimeSeconds() + (lockMinutes * 60L);
+			_db.SetSetting(SettingKeys.LaunchPasswordLockedUntil, until.ToString());
+			MessageBox.Show($"密码错误次数过多，已锁定 {lockMinutes} 分钟。", "提示", MessageBoxButton.OK, MessageBoxImage.Hand);
 			base.DialogResult = false;
 			Close();
 		}
 		else
 		{
-			MessageBox.Show($"密码错误，剩余 {MaxFailures - _failures} 次尝试。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
+			MessageBox.Show($"密码错误，剩余 {MaxFailures - failures} 次尝试。", "提示", MessageBoxButton.OK, MessageBoxImage.Exclamation);
 		}
 	}
 }
@@ -3415,6 +3778,7 @@ public partial class SetLaunchPasswordWindow : Window
 			{
 				db.DeleteSetting(SettingKeys.LaunchPasswordHash);
 				db.DeleteSetting(SettingKeys.LaunchPasswordSalt);
+				LoginWindow.ResetFailures(db);
 				MessageBox.Show("启动密码已移除。", "提示");
 				base.DialogResult = true;
 				Close();
@@ -3429,6 +3793,7 @@ public partial class SetLaunchPasswordWindow : Window
 		string hash = CryptoService.HashLaunchPassword(NewPwd.Password, out string salt);
 		db.SetSetting(SettingKeys.LaunchPasswordHash, hash);
 		db.SetSetting(SettingKeys.LaunchPasswordSalt, salt);
+		LoginWindow.ResetFailures(db);
 		MessageBox.Show("启动密码已设置。", "提示");
 		base.DialogResult = true;
 		Close();
@@ -3834,6 +4199,12 @@ public partial class EditConnectionWindow : Window, INotifyPropertyChanged
 			return;
 		}
 		Result.Password = ShowPlainPassword ? PlainPassword : PwdBox.Password;
+		string? lengthError = Result.ValidateLengths();
+		if (lengthError != null)
+		{
+			MessageBox.Show(lengthError, "提示");
+			return;
+		}
 		if (!string.IsNullOrEmpty(Result.Password)
 			|| MessageBox.Show("登陆密码为空，确定继续吗？", "提示", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
 		{
@@ -4379,6 +4750,7 @@ using System.IO.Pipes;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Threading;
 using RemoteDesktopPlus.Models;
 using RemoteDesktopPlus.Services;
 using RemoteDesktopPlus.ViewModels;
@@ -4390,15 +4762,59 @@ using RemoteDesktopPlus.Views;
 /// </summary>
 public partial class App : Application
 {
-	private const string MutexName = "Local\\RemoteDesktopPlusPlus.SingleInstance.Mutex";
+	/// <summary>
+	/// 单实例互斥体名称。加厂商前缀避免与其它同名软件在内核对象命名空间撞名。
+	/// 保留 <c>Local\\</c> 前缀：它是按登录会话隔离的，多用户终端服务器上
+	/// 不同用户各自可运行独立实例；改用 <c>Global\\</c> 会让 A 用户的实例把 B 用户踢下线。
+	/// </summary>
+	private const string MutexName = "Local\\CodeCoreLab.RemoteDesktopPlus.SingleInstance.Mutex";
 
-	private const string PipeName = "RemoteDesktopPlusPlus.SingleInstance.Activate";
+	private const string PipeName = "CodeCoreLab.RemoteDesktopPlus.SingleInstance.Activate";
 
 	private Mutex? _instanceMutex;
 
 	private CancellationTokenSource? _pipeCts;
 
 	private TrayController? _tray;
+
+	/// <summary>
+	/// 注册全局异常处理：未捕获的 UI 线程异常不再直接终止进程。
+	/// WPF 的 async 事件处理器（[RelayCommand] async Task ...）抛出的异常会沿
+	/// SynchronizationContext 回到 Dispatcher，未处理即整进程闪退——这是最难复现、
+	/// 也最劝退社区用户的问题类型。此处记录日志、提示用户、标记已处理。
+	/// </summary>
+	private static void RegisterGlobalExceptionHandlers()
+	{
+		Dispatcher.CurrentDispatcher.UnhandledException += delegate (object sender, DispatcherUnhandledExceptionEventArgs e)
+		{
+			Log.Error("未捕获的界面线程异常", e.Exception);
+			try
+			{
+				MessageBox.Show(
+					"程序遇到一个未预期的错误，已记录到日志，当前操作已中止。\n\n" +
+					"异常信息: " + e.Exception.Message +
+					"\n\n若反复出现，请把以下信息反馈给开发者：\n" +
+					"日志目录: " + Path.Combine(AppContext.BaseDirectory, "logs"),
+					"发生错误", MessageBoxButton.OK, MessageBoxImage.Error);
+			}
+			catch
+			{
+				// 连弹窗都失败时不得再抛，否则回到原始崩溃路径。
+			}
+			e.Handled = true;
+		};
+
+		TaskScheduler.UnobservedTaskException += delegate (object sender, UnobservedTaskExceptionEventArgs e)
+		{
+			Log.Error("未观察到的任务异常", e.Exception);
+			e.SetObserved();
+		};
+
+		AppDomain.CurrentDomain.UnhandledException += delegate (object sender, UnhandledExceptionEventArgs e)
+		{
+			Log.Error("AppDomain 未处理异常", e.ExceptionObject as Exception);
+		};
+	}
 
 	protected override void OnStartup(StartupEventArgs e)
 	{
@@ -4430,6 +4846,7 @@ public partial class App : Application
 
 		base.OnStartup(e);
 		Log.Info("应用启动，基线组合根装配开始");
+		RegisterGlobalExceptionHandlers();
 		RdpLauncher.CleanupTempFiles();
 		DatabaseService db = DatabaseService.Instance;
 		CryptoService crypto = CryptoService.Instance;
@@ -4452,10 +4869,20 @@ public partial class App : Application
 		// 组合根：整个程序只有这里把服务实例与视图实现装配到一起。
 		WpfDialogService dialogs = new WpfDialogService();
 
-		if (db.HasLaunchPassword() && !new LoginWindow(db, crypto).ShowDialog().GetValueOrDefault())
+		if (db.HasLaunchPassword())
 		{
-			Shutdown();
-			return;
+			int lockRemaining = LoginWindow.GetLockRemainingSeconds(db);
+			if (lockRemaining > 0)
+			{
+				MessageBox.Show($"启动密码已被锁定，请 {Math.Max(1, (int)Math.Ceiling(lockRemaining / 60.0))} 分钟后重试。", "提示", MessageBoxButton.OK, MessageBoxImage.Warning);
+				Shutdown();
+				return;
+			}
+			if (!new LoginWindow(db, crypto).ShowDialog().GetValueOrDefault())
+			{
+				Shutdown();
+				return;
+			}
 		}
 		if (crypto.IsMasterPasswordConfigured() && !crypto.HasMasterKey)
 		{

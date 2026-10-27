@@ -29,7 +29,7 @@
             <TextBlock Style="{StaticResource Eyebrow}" Text="端口" />
             <TextBlock Text="*" Foreground="{StaticResource DangerBrush}" Margin="4,0,0,0" />
           </StackPanel>
-          <TextBox Name="IpBox" Grid.Row="1" Grid.Column="0" FontFamily="{StaticResource MonoFont}" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" />
+          <TextBox Name="IpBox" Grid.Row="1" Grid.Column="0" FontFamily="{StaticResource MonoFont}" MaxLength="255" Text="{Binding Host, UpdateSourceTrigger=PropertyChanged}" />
           <TextBox Grid.Row="1" Grid.Column="2" FontFamily="{StaticResource MonoFont}" Text="{Binding Port, UpdateSourceTrigger=PropertyChanged}" />
         </Grid>
         <StackPanel Margin="0,14,0,0">
@@ -37,15 +37,15 @@
             <TextBlock Style="{StaticResource Eyebrow}" Text="登陆账号" />
             <TextBlock Text="*" Foreground="{StaticResource DangerBrush}" Margin="4,0,0,0" />
           </StackPanel>
-          <TextBox Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
+          <TextBox MaxLength="128" Text="{Binding UserName, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
         <StackPanel Margin="0,14,0,0">
           <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
             <TextBlock Style="{StaticResource Eyebrow}" Text="登陆密码" />
           </StackPanel>
           <Grid>
-            <PasswordBox Name="PwdBox" Padding="10,6,32,6" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:InverseBoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" PasswordChanged="PwdBox_PasswordChanged" />
-            <TextBox Name="PlainBox" Padding="10,6,32,6" Text="{Binding PlainPassword, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:BoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
+            <PasswordBox Name="PwdBox" Padding="10,6,32,6" MaxLength="1024" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:InverseBoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" PasswordChanged="PwdBox_PasswordChanged" />
+            <TextBox Name="PlainBox" Padding="10,6,32,6" MaxLength="1024" Text="{Binding PlainPassword, UpdateSourceTrigger=PropertyChanged, RelativeSource={RelativeSource AncestorType=Window}}" Visibility="{Binding ShowPlainPassword, Converter={x:Static conv:BoolToVisibilityConverter.Instance}, RelativeSource={RelativeSource AncestorType=Window}}" />
             <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,4,0" Width="24" Height="24" Padding="0" Background="#00FFFFFF" BorderThickness="0" Cursor="Hand" Focusable="False" ToolTip="显示/隐藏密码" IsChecked="{Binding ShowPlainPassword, RelativeSource={RelativeSource AncestorType=Window}}">
               <Control.Template>
                 <ControlTemplate TargetType="{x:Type ToggleButton}">
@@ -64,7 +64,7 @@
         </StackPanel>
         <StackPanel Margin="0,14,0,0">
           <TextBlock Style="{StaticResource Eyebrow}" Text="备注" Margin="0,0,0,6" />
-          <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Text="{Binding Remark, UpdateSourceTrigger=PropertyChanged}" />
+          <TextBox AcceptsReturn="True" TextWrapping="Wrap" Height="64" MaxLength="2000" VerticalContentAlignment="Top" VerticalScrollBarVisibility="Auto" Text="{Binding Remark, UpdateSourceTrigger=PropertyChanged}" />
         </StackPanel>
         <TextBlock Text="* 为必填项" Foreground="{StaticResource InkSubtleBrush}" FontSize="11" Margin="0,12,0,0" HorizontalAlignment="Right" />
       </StackPanel>

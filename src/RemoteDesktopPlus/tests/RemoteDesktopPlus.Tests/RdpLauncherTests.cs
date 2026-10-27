@@ -21,10 +21,14 @@ internal sealed class RecordingRdpBackend : IRdpBackend
 	/// <summary>真正传给进程的每个参数（等价于 ProcessStartInfo.ArgumentList 的可见内容）。</summary>
 	public List<string> ProcessArguments { get; } = new List<string>();
 
-	public void StoreCredential(string target, string userName, string password)
+	/// <summary>模拟凭据写入失败（用于断言调用方不会静默吞掉失败）。</summary>
+	public bool StoreCredentialResult { get; set; } = true;
+
+	public bool StoreCredential(string target, string userName, string password)
 	{
 		// 只记录 target，密码本身留在参数里即可被测试读取（测试需要它来断言不泄漏）
 		StoredCredentials.Add(target + "|" + userName + "|" + password);
+		return StoreCredentialResult;
 	}
 
 	public void DeleteCredential(string target)
@@ -256,6 +260,23 @@ public class RdpLauncherTests
 			Assert.DoesNotContain("PLAINTEXT-MARKER", arg);
 		}
 		Assert.DoesNotContain("/pass:", string.Join(" ", rec.ProcessArguments));
+	}
+
+	[Fact]
+	public void Launch_CredentialWriteFails_StillStartsClientWithoutThrowing()
+	{
+		// 凭据写入失败必须被记录（不能静默），但不应阻断连接：
+		// mstsc 会退化为弹窗询问密码，用户仍可连上。
+		RecordingRdpBackend rec;
+		WithRecordingBackend(delegate(RecordingRdpBackend b)
+		{
+			b.StoreCredentialResult = false;
+			RdpLauncher.Launch(Opt(user: "admin", password: "S3cr3t!"));
+			return 0;
+		}, out rec);
+
+		Assert.Single(rec.StoredCredentials);
+		Assert.Single(rec.StartedClients);
 	}
 
 	[Fact]
