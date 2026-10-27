@@ -78,4 +78,4 @@ dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained f
 
 ## 许可
 
-MIT License，见 [LICENSE](LICENSE)。
+MIT License，见 [LICENSE](../LICENSE)。
