@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- 依赖锁文件（2026-10-30 治理）：packages.lock.json 入库，
+         dotnet restore 校验锁内容，构建可复现。 -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <AssemblyName>小马远程桌面</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
     <OutputType>WinExe</OutputType>
@@ -44,9 +47,9 @@
       也会让克隆后的仓库体积膨胀、CI 缓存失效。
       版本与原先 vendored 的 DLL 保持一致，行为不变。
     -->
-    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.3.2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="gong-wpf-dragdrop" Version="3.2.1" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
-    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.6" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.33" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 </Project>

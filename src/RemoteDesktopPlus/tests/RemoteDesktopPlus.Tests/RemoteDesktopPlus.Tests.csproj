@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
+    <!-- 依赖锁文件（2026-10-30 治理）：packages.lock.json 入库，
+         dotnet restore 校验锁内容，构建可复现。 -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
     <TargetFramework>net8.0-windows</TargetFramework>
     <UseWPF>True</UseWPF>
     <PlatformTarget>x64</PlatformTarget>
