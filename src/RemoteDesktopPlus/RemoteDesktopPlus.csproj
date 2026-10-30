@@ -8,7 +8,7 @@
     <OutputType>WinExe</OutputType>
     <UseWPF>True</UseWPF>
     <UseWindowsForms>True</UseWindowsForms>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <PlatformTarget>x64</PlatformTarget>
     <Nullable>annotations</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
@@ -22,12 +22,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <RootNamespace />
     <!--
-      WFAC010：WinForms 分析器要求把高 DPI 从 app.manifest 挪到 ApplicationHighDpiMode。
+      高 DPI 写法告警：WinForms 分析器要求把高 DPI 从 app.manifest 挪到 ApplicationHighDpiMode。
       本项目是 WPF 主体，PerMonitorV2 只能由 manifest 提供（ApplicationHighDpiMode 走的是
       WinForms 的运行时路径，对 WPF 窗口不生效）。WinForms 仅用于托盘 NotifyIcon，
       不涉及任何 Form 的高 DPI 布局，故保留 manifest 写法并在此显式静默该告警。
+      · WFAC010 —— .NET 8 时代的编号
+      · WFO0003 —— .NET 10 起改名（同一规则），两个都抑制以兼容两条目标框架
     -->
-    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <NoWarn>$(NoWarn);WFAC010;WFO0003</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="app.ico" />
@@ -49,7 +51,7 @@
     -->
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="gong-wpf-dragdrop" Version="3.2.1" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.33" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.14" />
     <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 </Project>
