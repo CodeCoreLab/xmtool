@@ -1,10 +1,8 @@
 # 小马远程桌面（XiaoMa Desktop）
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-8a2be2.svg)](LICENSE)[![Releases](https://img.shields.io/badge/Releases-latest-blue.svg)](https://github.com/CodeCoreLab/xmtool/releases)[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)]
-
 轻量的 Windows 远程桌面连接管理工具。单机运行，不联网、不上云、无服务端；数据与密钥均不出本机。
 
-> 工程代号 `RemoteDesktopPlus` · 当前版本 **v1.0.0**（2026-10-20）
+> 工程代号 `RemoteDesktopPlus` · 当前版本 **v1.1.0**（2026-11-03）
 
 ---
 
@@ -15,8 +13,8 @@
 | 接手维护（构建/发布/排障） | **`docs/MAINTENANCE.md`** ← 第一入口 |
 | 理解代码结构（模块/数据流/扩展） | **`docs/ARCHITECTURE.md`** |
 | 看源码 | `src/RemoteDesktopPlus/`（全量代码在 `RemoteDesktopPlus.All.cs`） |
-| 拿安装包 | 仓库的 [Releases](https://github.com/CodeCoreLab/xmtool/releases) 页面 |
-| 了解依赖与许可 | [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) |
+| 拿安装包 | 仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面 |
+| 了解依赖与许可 | 仓库根目录 `THIRD-PARTY-NOTICES.md` |
 
 ---
 
@@ -54,12 +52,18 @@ xmtool/
 
 ## 功能
 
-- **连接记录管理** —— 增删改查、拖拽排序、双击直连
-- **剪贴板与磁盘共享** —— 剪贴板重定向（`redirectclipboard:i:1`）；磁盘默认「全部盘符」
-  （`drivestoredirect:s:*`，含连接后新插的 U 盘），远程机 `\\tsclient\` 下可互拷任意盘
+- **连接记录管理** —— 增删改查、拖拽排序、双击直连；**连接成功一次即自动保存**（无需手动点保存）
+- **剪贴板与磁盘共享** —— 剪贴板重定向（`redirectclipboard:i:1`）；磁盘**固定全部盘符**
+  （`drivestoredirect:s:*`，双向、含连接后新插的 U 盘），远程机 `\\tsclient\` 下可互拷任意盘；
+  共享范围不再提供单选，减少一次配置决策
+- **流畅优先档（默认开启）** —— 面向「无 GPU 虚拟机 + 弱带宽」的 .rdp 调优：16 位色、
+  关远程 DWM 合成/壁纸/窗口拖动/菜单动画、持久位图缓存、音频与外设重定向关闭；
+  保留字体平滑与剪贴板。可关闭以取回无损画质
+- **远程桌面窗口最大化** —— 默认让 mstsc 窗口铺满可用区域但不遮任务栏（winposstr ShowCmd=3，区别于会盖住任务栏的全屏）；
+  另有「全屏」与固定像素档；窗口化连接带 `smart sizing` + `dynamic resolution`
 - **最近连接排序** —— 相对时间列（刚刚/N 分钟前/N 天前），可切换按最近使用倒序
-- **分组与分组级配置** —— 按组筛选；分辨率/盘符/剪贴板可按组覆盖，未覆盖项继承全局；
-  顶栏「组设置」面板配置
+- **分组与分组级配置** —— 按组筛选；分辨率/流畅优先/磁盘共享/剪贴板可按组覆盖，
+  未覆盖项继承全局；顶栏「组设置」面板配置
 - **导出单条连接为 .rdp** —— 右键导出，便于分享排障；**不含密码**
 - **本机 RDP 状态轮询** —— 监听状态每 3 秒刷新（原先只在启动时取一次快照，会显示过期状态）
 - **凭据加密** —— 记录级 DPAPI（`D1$`）/ 主密码 AES-256-GCM（`M1$`）双形态，可共存、可切换、可跨机迁移
@@ -73,7 +77,7 @@ xmtool/
 
 ## 下载
 
-前往仓库的 [Releases](https://github.com/CodeCoreLab/xmtool/releases) 页面下载对应版本。
+前往仓库的 [Releases](https://github.com/your-org/xmtool/releases) 页面下载对应版本。
 
 | 版本 | 大小 | 前提 |
 |---|---|---|
@@ -99,7 +103,7 @@ xmtool/
 ## 开发
 
 ```bash
-cd src/RemoteDesktopPlus
+cd xmtool/src/RemoteDesktopPlus
 
 # 还原依赖并构建
 dotnet build -c Release
@@ -122,11 +126,11 @@ bin/Release/net8.0-windows/小马远程桌面.exe
 | Microsoft.Data.Sqlite | 8.0.10 | SQLite 访问 |
 | SQLitePCLRaw.bundle_e_sqlite3 | 2.1.6 | SQLite 原生库绑定 |
 
-完整许可说明见 [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md)。
+完整许可说明见仓库根目录的 [`THIRD-PARTY-NOTICES.md`](../THIRD-PARTY-NOTICES.md)。
 
 ---
 
 ## 许可
 
-MIT License，见 [`LICENSE`](LICENSE)。
+MIT License，见 [`LICENSE`](LICENSE)（仓库根目录）。
 

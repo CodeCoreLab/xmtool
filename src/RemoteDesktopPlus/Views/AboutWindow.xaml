@@ -38,7 +38,7 @@
           <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Grid.Row="0" Grid.Column="0" Text="版本" Style="{StaticResource FieldLabel}" />
-        <TextBlock Grid.Row="0" Grid.Column="1" Text="v1.0.0" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
+        <TextBlock Name="VersionText" Grid.Row="0" Grid.Column="1" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="2" Grid.Column="0" Text="技术" Style="{StaticResource FieldLabel}" />
         <TextBlock Grid.Row="2" Grid.Column="1" Text=".NET 8 · WPF" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="4" Grid.Column="0" Text="作者" Style="{StaticResource FieldLabel}" />
@@ -47,7 +47,7 @@
         <TextBlock Grid.Row="6" Grid.Column="1" Text="© 2026 马欣 · MIT License" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
       </Grid>
     </Border>
-    <TextBlock Grid.Row="2" Margin="2,16,2,0" Style="{StaticResource HelperText}" Text="一个轻量的远程桌面连接管理工具，支持连接记录、凭证加密保存、批量在线检测与本机远程桌面端口管理。" />
+    <TextBlock Grid.Row="2" Margin="2,16,2,0" Style="{StaticResource HelperText}" TextWrapping="Wrap" Text="轻量远程桌面连接管理工具：连接记录、凭证加密保存、批量在线检测。默认全盘符双向共享与剪贴板互通，连接成功即自动保存；内置流畅优先档（低带宽低渲染负担）适配无 GPU 的虚拟机与弱带宽链路；分辨率默认让远程桌面窗口最大化铺满可用区域且不遮任务栏。" />
     <Button Grid.Row="3" Content="确 定" MinWidth="100" Height="40" HorizontalAlignment="Right" Margin="0,22,0,0" Style="{StaticResource ButtonPrimary}" IsDefault="True" IsCancel="True" Click="Ok_Click" />
   </Grid>
 </Window>

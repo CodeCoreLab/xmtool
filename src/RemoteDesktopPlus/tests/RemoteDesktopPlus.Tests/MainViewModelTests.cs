@@ -40,8 +40,8 @@ public class MainViewModelTests
 
 		Assert.Empty(vm.Connections);
 		Assert.Equal(3389, vm.Port);
-		Assert.Equal("1920*1080", vm.Resolution);
-		Assert.Equal(11, vm.ResolutionOptions.Count);
+		Assert.Equal(MainViewModel.MaximizedResolutionDisplayName, vm.Resolution);
+		Assert.Equal(12, vm.ResolutionOptions.Count);
 		Assert.True(vm.OptionsExpanded);
 	}
 
@@ -62,7 +62,8 @@ public class MainViewModelTests
 		Assert.Equal("2560*1440", vm.Resolution);
 		Assert.True(vm.RedirectLocalDrive);
 		Assert.True(vm.ForceConsole);
-		Assert.Equal("D", vm.LocalDriveLetter);
+		// 盘符共享已固定为全部盘符：历史库里的 "D" 必须被忽略，不能把共享范围缩回单盘。
+		Assert.True(vm.BuildEffectiveOptions(new ConnectionItem { Host = "h", Port = 3389 }).LocalDriveLetter == "*");
 
 		// 加载期间必须抑制回写：否则会把「非法但已存的值」覆盖成默认值。
 		DatabaseService verify = tmp.NewService();
@@ -78,7 +79,8 @@ public class MainViewModelTests
 
 		MainViewModel vm = new MainViewModel(seed, new CryptoService(seed), new FakeDialogService());
 
-		Assert.Equal("1920*1080", vm.Resolution);
+		// 越界值不采纳，回落到默认档（默认档现在是「自适应」）。
+		Assert.Equal(MainViewModel.MaximizedResolutionDisplayName, vm.Resolution);
 	}
 
 	[Fact]

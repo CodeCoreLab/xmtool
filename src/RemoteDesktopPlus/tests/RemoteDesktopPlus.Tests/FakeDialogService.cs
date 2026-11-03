@@ -95,7 +95,7 @@ public sealed class FakeDialogService : IDialogService
 
 	public Queue<bool> GroupOptionsAnswers { get; } = new Queue<bool>();
 
-	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
+	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions)
 	{
 		GroupOptionsOpened.Add(groupName);
 		return GroupOptionsAnswers.Count > 0 && GroupOptionsAnswers.Dequeue();

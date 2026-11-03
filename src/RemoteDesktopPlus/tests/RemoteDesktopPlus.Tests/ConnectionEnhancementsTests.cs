@@ -150,7 +150,6 @@ public class ConnectionEnhancementsTests
 		vm.Resolution = "1920*1080";
 		vm.RedirectClipboard = true;
 		vm.RedirectLocalDrive = true;
-		vm.LocalDriveLetter = MainViewModel.AllDrivesDisplayName;
 
 		ConnectionItem item = Seed(db, vm, "10.0.0.1", group: "客户A");
 		// 组内没有任何覆盖 → 全部继承全局
@@ -170,7 +169,6 @@ public class ConnectionEnhancementsTests
 		vm.Resolution = "1920*1080";
 		vm.RedirectClipboard = true;
 		vm.RedirectLocalDrive = true;
-		vm.LocalDriveLetter = MainViewModel.AllDrivesDisplayName;
 
 		ConnectionItem item = Seed(db, vm, "10.0.0.2", group: "只读环境");
 
