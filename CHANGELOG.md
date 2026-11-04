@@ -24,34 +24,6 @@
   无法审计来源，会让克隆后的仓库体积膨胀、CI 缓存失效
 - 测试工程移除 6 处 HintPath（`PackageReference` 依赖可传递）
 
-## [1.2.0] - 2026-11-04
-
-### 修复
-
-- **远程画面字体渲染模糊**：回退「流畅优先」档中所有影响画面视觉质量的
-  `.rdp` 键。根因（mstsc 侧三层叠加）：`session bpp:16` 下 ClearType 子像素
-  渲染不可用；`connection type:1`（低带宽档）禁用字体平滑并触发激进压缩；
-  `allow desktop composition:0` 关闭 DWM 合成使 ClearType 退化为灰度平滑。
-  回退后 32 位色 + ClearType 恢复，字体恢复清晰。
-- 明确**保留**的无损优化：`compression:i:1`、`bitmapcachepersistenable:i:1`、
-  `audiomode:i:2`、打印机/串口/智能卡/POS/WebAuthn 重定向全关 ——
-  均只降低传输/通道开销，不改变解码后的像素值。
-
-### 移除
-
-- **「流畅优先」选项**：界面复选框、分组覆盖项、持久化键读写与
-  `AppendPerformanceKeys` 整体删除，替换为无条件写出的无损效率键
-  （见上）。旧库残留键读到即忽略。
-- **「共享剪贴板」「共享本地磁盘」界面开关**：两项内置默认开启
-  （`.rdp` 恒写 `redirectclipboard:i:1` 与 `drivestoredirect:s:*`），
-  界面与分组覆盖不再提供；`RdpOptions` 相应精简。
-
-### 变更
-
-- 程序集版本 1.1.0 → 1.2.0
-- 分组设置窗口仅保留「分辨率」覆盖；主界面「显示与挂载」仅剩
-  分辨率与「强制控制台模式」
-
 ## [1.1.0] - 2026-11-03
 
 ### 新增
