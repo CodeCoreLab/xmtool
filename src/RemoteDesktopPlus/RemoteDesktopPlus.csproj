@@ -3,7 +3,7 @@
     <!-- 依赖锁文件（2026-10-30 治理）：packages.lock.json 入库，
          dotnet restore 校验锁内容，构建可复现。 -->
     <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
-    <AssemblyName>小马远程桌面</AssemblyName>
+    <AssemblyName>枢联</AssemblyName>
     <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
     <OutputType>WinExe</OutputType>
     <UseWPF>True</UseWPF>

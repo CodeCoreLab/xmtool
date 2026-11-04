@@ -1,10 +1,10 @@
-# 小马远程桌面（XiaoMa Desktop）
+# 枢联 ShuLian
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-8a2be2.svg)](LICENSE)[![Releases](https://img.shields.io/badge/Releases-latest-blue.svg)](https://github.com/CodeCoreLab/xmtool/releases)[![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D4.svg)]
 
-轻量的 Windows 远程桌面连接管理工具。单机运行，不联网、不上云、无服务端；数据与密钥均不出本机。
+**枢联** —— 轻量的 Windows 远程桌面连接管理工具。命名取义：「枢」为枢纽，把散落各处的服务器收敛为一处运维支点；「联」为联接，让每一次远程联接一键直达。单机运行，不联网、不上云、无服务端；数据与密钥均不出本机。
 
-> 工程代号 `RemoteDesktopPlus` · 当前版本 **v1.0.0**（2026-10-20）
+> 工程代号 `RemoteDesktopPlus` · 产品名 **枢联** · 当前版本 **v2.0.0**（2026-11-04）
 
 ---
 
@@ -108,7 +108,7 @@ dotnet build -c Release
 dotnet test
 
 # 产物
-bin/Release/net8.0-windows/小马远程桌面.exe
+bin/Release/net8.0-windows/枢联.exe
 ```
 
 需要 **.NET 8 SDK 或更高版本**。

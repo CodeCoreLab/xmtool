@@ -1,8 +1,8 @@
-# 小马远程桌面
+# 枢联 ShuLian
 
 轻量的 Windows 远程桌面连接管理工具：集中维护连接记录、加密保存凭据、批量在线检测、本机远程桌面端口管理。
 
-> 工程代号 `RemoteDesktopPlus`，产品名「小马远程桌面」，产物为 `小马远程桌面.exe`。
+> 工程代号 `RemoteDesktopPlus`，产品名「枢联」，产物为 `枢联.exe`。「枢」取枢纽之义——收敛散落的服务器为一处运维支点；「联」取联接之义——远程联接一键直达。
 
 ## 功能
 
@@ -66,7 +66,7 @@ dotnet publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained f
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -p:DebugType=none -o publish_final
 ```
 
-发布产物为**单个 `小马远程桌面.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
+发布产物为**单个 `枢联.exe`（约 2.5 MB）**：托管 DLL 与原生 `e_sqlite3.dll` 全部内嵌，首次启动自动解压原生库到 `%TEMP%\.net\`；目标机器需已安装 .NET 8 Desktop Runtime。如需零前提分发，加 `--self-contained true -p:EnableCompressionInSingleFile=true`（产物约 70 MB）。
 
 ### 改界面后如何验证布局（重要）
 
@@ -76,13 +76,13 @@ exe 的 manifest 声明了 `requireAdministrator`，**无法用脚本直接启�
 做法：反射加载已构建的 DLL，实例化 `MainWindow` 后用 `RenderTargetBitmap` 渲染成 PNG，绕开提权：
 
 ```csharp
-var asm = Assembly.LoadFrom(@"<...>\bin\Release\net8.0-windows\小马远程桌面.dll");
+var asm = Assembly.LoadFrom(@"<...>\bin\Release\net8.0-windows\枢联.dll");
 
 var app = new Application();                       // 必须先装配样式，否则静态资源找不到
 app.Resources.MergedDictionaries.Add(new ResourceDictionary {
-    Source = new Uri("pack://application:,,,/小马远程桌面;component/styles/colors.xaml") });
+    Source = new Uri("pack://application:,,,/枢联;component/styles/colors.xaml") });
 app.Resources.MergedDictionaries.Add(new ResourceDictionary {
-    Source = new Uri("pack://application:,,,/小马远程桌面;component/styles/controls.xaml") });
+    Source = new Uri("pack://application:,,,/枢联;component/styles/controls.xaml") });
 
 var db = new DatabaseService(tempDbPath);
 db.Initialize();                                   // 反射创建不会自动建表，必须显式调用

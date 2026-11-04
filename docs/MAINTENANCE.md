@@ -1,8 +1,8 @@
-# 小马远程桌面 — 项目维护文档
+# 枢联 — 项目维护文档
 
 > **定位**：接手本项目的第一入口。讲清「东西在哪、怎么构建、怎么发布、怎么排障」。
 > 架构原理与模块划分见同目录 `ARCHITECTURE.md`。
-> **最后更新**：2026-10-20 · **当前版本**：v1.0.0（构建号 20261020）
+> **最后更新**：2026-11-04 · **当前版本**：v2.0.0（产品由「小马远程桌面」更名为「枢联」，工程代号与内部命名不变）
 
 ---
 
@@ -37,8 +37,8 @@ E:\xmtool\xmtool\
 │
 ├── releases\                   发布产物归档（按版本分目录）
 │   └── v1.0.0-20261020\
-│       ├── 小马远程桌面-v1.0.0-fdd-2.5MB.exe        框架依赖版
-│       └── 小马远程桌面-v1.0.0-standalone-70MB.exe  自包含免依赖版
+│       ├── 枢联-v1.0.0-fdd-2.5MB.exe        框架依赖版
+│       └── 枢联-v1.0.0-standalone-70MB.exe  自包含免依赖版
 │
 ├── logs\                       构建/发布/部署操作日志
 ├── data\                       运行时数据与状态快照（非源码数据）
@@ -135,7 +135,7 @@ $DOTNET test tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Rel
 
 ```bash
 # 启动产物，观察 12 秒是否存活 + 日志是否写入 + data.db 是否自动创建
-"./releases/v1.0.0-20261020/小马远程桌面-v1.0.0-fdd-2.5MB.exe"
+"./releases/v1.0.0-20261020/枢联-v1.0.0-fdd-2.5MB.exe"
 # 预期：进程存活；%LOCALAPPDATA%\RemoteDesktopPlus\logs\ 出现当日日志；同目录生成 data.db
 ```
 
@@ -168,27 +168,27 @@ $DOTNET publish RemoteDesktopPlus.csproj -c Release -r win-x64 --self-contained 
 ```bash
 # 1) 归档到 releases（版本目录 + 语义化文件名）
 mkdir -p ./releases/v1.0.1-<日期>
-cp publish_final/小马远程桌面.exe      ./releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-fdd-2.5MB.exe
-cp publish_standalone/小马远程桌面.exe ./releases/v1.0.1-<日期>/小马远程桌面-v1.0.1-standalone-70MB.exe
+cp publish_final/枢联.exe      ./releases/v1.0.1-<日期>/枢联-v1.0.1-fdd-2.5MB.exe
+cp publish_standalone/枢联.exe ./releases/v1.0.1-<日期>/枢联-v1.0.1-standalone-70MB.exe
 
 # 2) 上传到测试机固定槽位（页面链接指向这里，永不变）
-scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_final/小马远程桌面.exe \
-    deploy@<测试机>:<站点根>/download/slim/小马远程桌面.exe
-scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_standalone/小马远程桌面.exe \
-    deploy@<测试机>:<站点根>/download/full/小马远程桌面.exe
+scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_final/枢联.exe \
+    deploy@<测试机>:<站点根>/download/slim/枢联.exe
+scp -i ~/.ssh/id_workbuddy -o ControlMaster=no publish_standalone/枢联.exe \
+    deploy@<测试机>:<站点根>/download/full/枢联.exe
 
 # 3) 历史留存（可选，带版本号）
 ssh -i ~/.ssh/id_workbuddy deploy@<测试机> \
-  "cp <站点根>/download/slim/小马远程桌面.exe \
-      '<站点根>/download/archive/小马远程桌面-v1.0.1-fdd.exe'"
+  "cp <站点根>/download/slim/枢联.exe \
+      '<站点根>/download/archive/枢联-v1.0.1-fdd.exe'"
 ```
 
 **下载槽位约定**（重要，勿改）：
 
 | 槽位 | URL | 用途 |
 |---|---|---|
-| 精简版 | `https://example.com/download/slim/小马远程桌面.exe` | 长期稳定分发 |
-| 整合版 | `https://example.com/download/full/小马远程桌面.exe` | 含最新改动 |
+| 精简版 | `https://example.com/download/slim/枢联.exe` | 长期稳定分发 |
+| 整合版 | `https://example.com/download/full/枢联.exe` | 含最新改动 |
 | 界面截图 | `https://example.com/download/screenshots/app-main.png` | 页面 hero 展示（见 §4.7） |
 
 ### 4.2.1 产品页部署路径（免日期白名单，2026-10-20 起）
@@ -411,12 +411,12 @@ cd <worker-scripts-dir>
 
 | 版本 | 日期 | 主要内容 |
 |---|---|---|
-| v1.0.0 | 2026-10-20 | 统一更名为「小马远程桌面」；源码单文件化（39 区段）；双版本单 exe 分发；产品页上线 + 双下载入口 |
+| v1.0.0 | 2026-10-20 | 统一更名为「枢联」；源码单文件化（39 区段）；双版本单 exe 分发；产品页上线 + 双下载入口 |
 
 **历史沿革**（名称变更对照，便于检索旧资料）：
 - 2026-10-16 前：产品名「远程桌面连接++」，产物 `远程桌面连接++.exe`，多文件源码结构
 - 2026-10-19：源码单文件化（`RemoteDesktopPlus.All.cs`），产物改为单 exe
-- 2026-10-20：统一更名为「小马远程桌面」，产物 `小马远程桌面.exe`
+- 2026-10-20：统一更名为「枢联」，产物 `枢联.exe`
 
 > 更名前的名称与哈希在 `docs\重构收工报告.md`、`docs\个人信息与溯源线索清理清单.md` 中按下**历史原样**保留，
 > 检索旧资料时以该两处为准。
