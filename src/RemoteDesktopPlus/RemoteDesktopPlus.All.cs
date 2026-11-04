@@ -1601,22 +1601,7 @@ using System.Threading.Tasks;
 /// </summary>
 public static class RdpLauncher
 {
-	/// <param name="DynamicResolution">
-	/// 是否允许会话内随客户端窗口变化动态改分辨率（默认 true）。
-	/// 对应 RDP 8.1+ 的 <c>dynamic resolution</c> 键；窗口拖动后画面不失真、不重连。
-	/// </param>
-	/// <param name="WindowMaximized">
-	/// 远程桌面窗口是否以**最大化**方式打开（默认 true）。
-	/// 通过 <c>winposstr</c> 的 ShowCmd=3 实现：mstsc 以窗口化模式启动但窗口最大化，
-	/// 由 Windows 按「工作区」摆放 —— 铺满可用区域的同时让出任务栏空间。
-	/// <para>
-	/// 与 <c>screen mode id:i:2</c>（真全屏）的区别：全屏会盖住任务栏且无法与本地窗口
-	/// 并排；最大化是普通窗口的放大，任务栏仍可见可点，正是运维场景需要的形态。
-	/// </para>
-	/// </param>
-	/// <param name="WindowLeft">还原态窗口左边（多显示器下决定落在哪块屏）。</param>
-	/// <param name="WindowTop">还原态窗口上边。</param>
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool ForceConsole, bool DynamicResolution = true, bool WindowMaximized = false, int WindowLeft = 0, int WindowTop = 0)
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool ForceConsole)
 	{
 		/// <summary>
 		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
@@ -1723,41 +1708,11 @@ public static class RdpLauncher
 			sb.AppendLine("screen mode id:i:1");
 			sb.AppendLine($"desktopwidth:i:{opt.Width.GetValueOrDefault()}");
 			sb.AppendLine($"desktopheight:i:{opt.Height.GetValueOrDefault()}");
-			// 窗口化连接必须开 smart sizing，否则客户端拉大窗口只会留黑边而不缩放，
-			// 用户为看清内容只能提高分辨率 —— 与「流畅优先」目标相反。
-			sb.AppendLine("smart sizing:i:1");
 		}
 		else
 		{
 			sb.AppendLine("screen mode id:i:2");
 		}
-
-		// 会话内分辨率跟随客户端窗口变化（RDP 8.1+）：拖动窗口后不重连、不模糊。
-		if (opt.DynamicResolution)
-		{
-			sb.AppendLine("dynamic resolution:i:1");
-		}
-
-		// 远程桌面窗口的初始摆放。
-		// 格式：winposstr:s:0,ShowCmd,Left,Top,Right,Bottom
-		//   ShowCmd=1 → 用 Left/Top/Right/Bottom 作为还原态窗口矩形
-		//   ShowCmd=3 → 窗口**最大化**；Left/Top/Right/Bottom 仅决定还原位置与落在哪块屏
-		// 需求「铺满可用区域但不遮任务栏」对应 ShowCmd=3：最大化是普通窗口的放大，
-		// 由 Windows 按工作区摆放，任务栏仍可见；而 screen mode id:i:2 是全屏，
-		// 会盖住任务栏 —— 两者不可混用。
-		if (opt.WindowMaximized)
-		{
-			sb.AppendLine($"winposstr:s:0,3,{opt.WindowLeft},{opt.WindowTop},{RestoreRight(opt)},{RestoreBottom(opt)}");
-		}
-		else if (opt.Width.HasValue && opt.Height.HasValue)
-		{
-			// 非最大化时给出与分辨率一致的还原矩形，避免 mstsc 沿用 Default.rdp 里
-			// 上一次的窗口位置导致「窗口在别处、内容还要滚动」。
-			sb.AppendLine($"winposstr:s:0,1,{opt.WindowLeft},{opt.WindowTop},{RestoreRight(opt)},{RestoreBottom(opt)}");
-		}
-
-		// 无损效率键：只保留对画面视觉零影响的传输/通道优化。
-		AppendEfficiencyKeys(sb);
 
 		// 剪贴板重定向写死开启：本地与远程互拷是运维基本预期，不再提供界面开关；
 		// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理，必须显式 i:1。
@@ -1771,70 +1726,6 @@ public static class RdpLauncher
 			sb.AppendLine("connect to console:i:1");
 		}
 		return sb.ToString();
-	}
-
-	/// <summary>
-	/// 还原态窗口右边坐标。取「左边 + 远程桌面宽 + 客户端边框宽度」——窗口必须比远程
-	/// 桌面内容略大，否则内容会被窗口边框挤出一小截。边框宽度按传统值 6px（见
-	/// Microsoft RDP 客户端窗口尺寸约定）；取不到宽度时退化为 1024 宽。
-	/// </summary>
-	private static int RestoreRight(RdpOptions opt)
-	{
-		int contentWidth = opt.Width.GetValueOrDefault();
-		if (contentWidth <= 0)
-		{
-			contentWidth = 1024;
-		}
-		return opt.WindowLeft + contentWidth + RestoreBorderWidth;
-	}
-
-	/// <summary>还原态窗口下边坐标：内容高 + 标题栏与边框高度（传统值约 27px）。</summary>
-	private static int RestoreBottom(RdpOptions opt)
-	{
-		int contentHeight = opt.Height.GetValueOrDefault();
-		if (contentHeight <= 0)
-		{
-			contentHeight = 768;
-		}
-		return opt.WindowTop + contentHeight + RestoreBorderHeight;
-	}
-
-	/// <summary>窗口化时客户端左右边框合计宽度（传统 mstsc 值）。</summary>
-	private const int RestoreBorderWidth = 6;
-
-	/// <summary>窗口化时客户端标题栏 + 下边框合计高度（传统 mstsc 值）。</summary>
-	private const int RestoreBorderHeight = 27;
-
-	/// <summary>
-	/// 追加**无损**效率键：只保留对画面视觉零影响的传输/通道优化。
-	/// <para>
-	/// 「流畅优先」档（session bpp 16、connection type 低带宽、关 DWM 合成/壁纸/动画、
-	/// videoplaybackmode 0）已于 v1.2.0 回退 —— 这些键直接改变画面视觉质量：
-	/// 16 位色下 ClearType 子像素渲染不可用、低带宽档禁用字体平滑并激进压缩、
-	/// 关 DWM 合成使 ClearType 退化为灰度，叠加表现即「远程字体发糊」。
-	/// </para>
-	/// <para>
-	/// 保留项对画质零影响：压缩与持久位图缓存只减少传输量、不改变像素值；
-	/// 音频/外设重定向关闭只省通道开销。字体清晰度由 <c>allow font smoothing:i:1</c>
-	/// 显式锁定（mstsc 对键缺失的处理依连接档位而定，显式写出最稳）。
-	/// </para>
-	/// </summary>
-	private static void AppendEfficiencyKeys(StringBuilder sb)
-	{
-		// RDP 压缩：传输量优化，解码后像素不变，无视觉损失。
-		sb.AppendLine("compression:i:1");
-		// 字体平滑（ClearType）显式开启：静态抗锯齿，无逐帧开销。
-		sb.AppendLine("allow font smoothing:i:1");
-		// 持久位图缓存：同一片静态区域（如终端窗口）不再每帧重传。
-		sb.AppendLine("bitmapcachepersistenable:i:1");
-		// 跳板机上远程音频无用途：2=不播放，省一路音频通道。
-		sb.AppendLine("audiomode:i:2");
-		// 外设重定向全关：省通道开销，跳板机场景无用途。
-		sb.AppendLine("redirectprinters:i:0");
-		sb.AppendLine("redirectcomports:i:0");
-		sb.AppendLine("redirectsmartcards:i:0");
-		sb.AppendLine("redirectposdevices:i:0");
-		sb.AppendLine("redirectwebauthn:i:0");
 	}
 
 	/// <summary>
@@ -2661,7 +2552,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	private string password = string.Empty;
 
 	[ObservableProperty]
-	private string resolution = MaximizedResolutionDisplayName;
+	private string resolution = "1920*1080";
 
 	[ObservableProperty]
 	private bool forceConsole;
@@ -2730,7 +2621,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	/// 分辨率候选。首项「最大化」让远程桌面窗口铺满工作区且不遮任务栏（见 <see cref="ParseResolution"/>），
 	/// 其余为固定像素档；「全屏」保留给需要远程机自行决定分辨率的场景。
 	/// </summary>
-	public IReadOnlyList<string> ResolutionOptions { get; } = new string[12] { MaximizedResolutionDisplayName, "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
+	public IReadOnlyList<string> ResolutionOptions { get; } = new string[11] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
 
 	/// <summary>「全部分组」在筛选下拉里的显示值。</summary>
 	public const string AllGroupsDisplayName = "全部分组";
@@ -2887,34 +2778,11 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	}
 
 	/// <summary>
-	/// 分辨率下拉的第一项：**远程桌面窗口最大化**。
-	/// <para>
-	/// 含义是「让 mstsc 的窗口铺满可用显示区域，但不盖住任务栏」，通过 .rdp 的
-	/// <c>winposstr</c> ShowCmd=3 实现（见 <see cref="RdpLauncher.BuildRdpContent"/>）：
-	/// 远程桌面仍是窗口化模式，由 Windows 按**工作区**摆放，任务栏保持可见可用。
-	/// </para>
-	/// <para>
-	/// 与它的近亲的区别：
-	/// <c>全屏</c>（screen mode id:2）独占整屏、会盖住任务栏、无法与本地窗口并排；
-	/// 固定像素档在 2K/4K 屏上会留黑边。三者是不同形态，不互相替代。
-	/// </para>
-	/// </summary>
-	public const string MaximizedResolutionDisplayName = "最大化（铺满可用区域，不遮任务栏）";
-
-	/// <summary>该分辨率档是否表示「远程桌面窗口最大化」。</summary>
-	public static bool IsMaximizedResolution(string? res)
-	{
-		return res != null && MaximizedResolutionDisplayName.Equals(res.Trim(), StringComparison.Ordinal);
-	}
-
-	/// <summary>
-	/// 把「1920*1080」「1280x720」「全屏」「最大化…」解析为像素尺寸。
-	/// 「最大化」返回屏幕工作区尺寸（给 <c>smart sizing</c> 一个合理的初始内容尺寸）；
-	/// 需要屏幕尺寸供给器 <paramref name="screenWorkArea"/>，传 null 时退回全屏。
+	/// 把「1920*1080」「1280x720」「全屏」解析为像素尺寸。
 	/// 全屏、空值、非法值、以及非正尺寸一律返回 (null, null)，
 	/// 与 <see cref="RdpLauncher.BuildRdpContent"/> 的「非正尺寸即全屏」约定保持一致。
 	/// </summary>
-	public static (int? w, int? h) ParseResolution(string res, Func<(int w, int h)>? screenWorkArea = null)
+	public static (int? w, int? h) ParseResolution(string res)
 	{
 		if (string.IsNullOrWhiteSpace(res))
 		{
@@ -2925,16 +2793,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		{
 			return (w: null, h: null);
 		}
-		if (IsMaximizedResolution(res))
-		{
-			(int w, int h)? area = screenWorkArea?.Invoke();
-			if (area is { w: > 0, h: > 0 })
-			{
-				return (area.Value.w, area.Value.h);
-			}
-			// 取不到屏幕信息（无 UI 线程的测试环境）时退回全屏，不能返回 0x0。
-			return (w: null, h: null);
-		}
 		string[] array = res.Split('*', 'x', 'X');
 		if (array.Length == 2 && int.TryParse(array[0], out var result) && int.TryParse(array[1], out var result2)
 			&& result > 0 && result2 > 0)
@@ -2942,44 +2800,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			return (w: result, h: result2);
 		}
 		return (w: null, h: null);
-	}
-
-	/// <summary>
-	/// 「最大化」分辨率档使用的屏幕尺寸来源。默认读主屏工作区；
-	/// 测试可替换为固定值（WPF 的 SystemParameters 在无 UI 线程时不可用）。
-	/// </summary>
-	public Func<(int w, int h)> ScreenWorkArea { get; set; } = PrimaryScreenWorkArea;
-
-	/// <summary>主屏工作区（扣除任务栏）的逻辑像素尺寸。</summary>
-	private static (int w, int h) PrimaryScreenWorkArea()
-	{
-		try
-		{
-			Rect area = SystemParameters.WorkArea;
-			return ((int)Math.Round(area.Width), (int)Math.Round(area.Height));
-		}
-		catch
-		{
-			// 无 UI 线程或读取失败：交给 ParseResolution 退回全屏。
-			return (0, 0);
-		}
-	}
-
-	/// <summary>
-	/// 主屏原点（逻辑像素）。winposstr 用绝对桌面坐标，多显示器下这个值决定
-	/// 远程桌面窗口还原时落在哪块屏 —— 取主屏原点即「落在主屏」。
-	/// </summary>
-	private static (int left, int top) ScreenOrigin()
-	{
-		try
-		{
-			Rect area = SystemParameters.WorkArea;
-			return ((int)Math.Round(area.Left), (int)Math.Round(area.Top));
-		}
-		catch
-		{
-			return (0, 0);
-		}
 	}
 
 	partial void OnResolutionChanged(string value)
@@ -3101,10 +2921,7 @@ public partial class MainViewModel
 
 		string resolution = group?.Resolution ?? Resolution;
 
-		var (width, height) = ParseResolution(resolution, ScreenWorkArea);
-		// 「最大化」档：让远程桌面窗口铺满工作区且不盖任务栏（winposstr ShowCmd=3）。
-		bool maximized = IsMaximizedResolution(resolution);
-		(int left, int top) origin = ScreenOrigin();
+		var (width, height) = ParseResolution(resolution);
 		return new RdpLauncher.RdpOptions(
 			item.Host,
 			item.Port,
@@ -3112,11 +2929,7 @@ public partial class MainViewModel
 			_crypto.Decrypt(item.EncryptedPassword),
 			width,
 			height,
-			ForceConsole,
-			true,
-			maximized,
-			origin.left,
-			origin.top);
+			ForceConsole);
 	}
 
 	public void ConnectItem(ConnectionItem item)
@@ -3386,9 +3199,7 @@ public partial class MainViewModel
 	/// <summary>按表单当前值构造 RDP 选项（不查库，用于首次连接这台主机）。</summary>
 	private RdpLauncher.RdpOptions BuildFormOptions()
 	{
-		var (width, height) = ParseResolution(Resolution, ScreenWorkArea);
-		bool maximized = IsMaximizedResolution(Resolution);
-		(int left, int top) origin = ScreenOrigin();
+		var (width, height) = ParseResolution(Resolution);
 		return new RdpLauncher.RdpOptions(
 			Host,
 			Port,
@@ -3396,11 +3207,7 @@ public partial class MainViewModel
 			Password,
 			width,
 			height,
-			ForceConsole,
-			true,
-			maximized,
-			origin.left,
-			origin.top);
+			ForceConsole);
 	}
 
 	[RelayCommand]

@@ -55,12 +55,9 @@ public class RdpLauncherTests
 		string password = "S3cr3t!",
 		int? w = null,
 		int? h = null,
-		bool forceConsole = false,
-		bool maximized = false,
-		int left = 0,
-		int top = 0)
+		bool forceConsole = false)
 	{
-		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, forceConsole, true, maximized, left, top);
+		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, forceConsole);
 	}
 
 	private static T WithRecordingBackend<T>(Func<RecordingRdpBackend, T> body, out RecordingRdpBackend backend)
@@ -312,27 +309,13 @@ public class RdpLauncherTests
 		Assert.StartsWith(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), RdpLauncher.GetTempDirectory());
 	}
 
-	// ─────────────────── 无损效率档（v1.2.0：流畅档视觉项全部回退） ───────────────────
+	// ─────────────────── 参数回退（v1.2.1：.rdp 回到 v1.0.x 纯净形态） ───────────────────
 
 	[Fact]
-	public void BuildRdpContent_EmitsOnlyVisuallyLosslessEfficiencyKeys()
+	public void BuildRdpContent_NeverEmitsAnyTuningKeys()
 	{
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900));
-
-		// 保留项全部对画质零影响：压缩/位图缓存只减传输量，外设与音频只省通道。
-		Assert.Contains("compression:i:1", content);
-		Assert.Contains("bitmapcachepersistenable:i:1", content);
-		Assert.Contains("audiomode:i:2", content);
-		Assert.Contains("redirectprinters:i:0", content);
-		Assert.Contains("redirectsmartcards:i:0", content);
-		Assert.Contains("allow font smoothing:i:1", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_NeverEmitsVisualQualityKeys()
-	{
-		// 字体发糊的三大根因（16 位色无 ClearType / 低带宽档禁平滑与激进压缩 /
-		// 关 DWM 合成使 ClearType 退化）必须整体缺席，回退后不得再写出。
+		// 字体模糊排查收官：所有调优键（视觉档 + 无损效率档）全部不再写出，
+		// .rdp 回到 v1.0.x 的纯净形态，画质完全由 mstsc 默认值决定。
 		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900));
 
 		Assert.DoesNotContain("session bpp", content);
@@ -341,16 +324,18 @@ public class RdpLauncherTests
 		Assert.DoesNotContain("bandwidthautodetect", content);
 		Assert.DoesNotContain("allow desktop composition", content);
 		Assert.DoesNotContain("disable wallpaper", content);
-		Assert.DoesNotContain("disable full window drag", content);
-		Assert.DoesNotContain("disable menu anims", content);
-		Assert.DoesNotContain("disable cursor setting", content);
-		Assert.DoesNotContain("videoplaybackmode", content);
+		Assert.DoesNotContain("compression", content);
+		Assert.DoesNotContain("allow font smoothing", content);
+		Assert.DoesNotContain("bitmapcachepersistenable", content);
+		Assert.DoesNotContain("audiomode", content);
+		Assert.DoesNotContain("redirectprinters", content);
+		Assert.DoesNotContain("redirectsmartcards", content);
 	}
 
 	[Fact]
 	public void BuildRdpContent_SharedChannels_AlwaysOn()
 	{
-		// 剪贴板与磁盘共享内置恒开，不受任何设置影响。
+		// 剪贴板与磁盘共享内置恒开（用户明确要求的功能，与画质无关，不随参数回退）。
 		string content = RdpLauncher.BuildRdpContent(Opt());
 
 		Assert.Contains("redirectclipboard:i:1", content);
@@ -358,78 +343,16 @@ public class RdpLauncherTests
 	}
 
 	[Fact]
-	public void BuildRdpContent_WindowedMode_EnablesSmartSizing()
+	public void BuildRdpContent_NeverEmitsScalingOrWindowPlacementKeys()
 	{
-		// 不开 smart sizing，客户端拉大窗口只会留黑边而不缩放，用户被迫提高分辨率。
-		Assert.Contains("smart sizing:i:1", RdpLauncher.BuildRdpContent(Opt(w: 1280, h: 720)));
-	}
+		// smart sizing（位图拉伸缩放）与 dynamic resolution 是 v1.1.0 引入的
+		// 画质相关键，随参数回退一并移除；窗口摆放交回 mstsc 默认行为。
+		string content = RdpLauncher.BuildRdpContent(Opt(w: 1280, h: 720));
 
-	[Fact]
-	public void BuildRdpContent_EmitsDynamicResolution()
-	{
-		Assert.Contains("dynamic resolution:i:1", RdpLauncher.BuildRdpContent(Opt(w: 1280, h: 720)));
-	}
-
-	// ─────────────────── 远程桌面窗口最大化（winposstr） ───────────────────
-
-	[Fact]
-	public void BuildRdpContent_MaximizedWindow_UsesShowCmd3()
-	{
-		// ShowCmd=3 是「窗口最大化」：窗口化模式下由 Windows 按工作区摆放，
-		// 铺满可用区域且任务栏保持可见。必须与 screen mode id:2（全屏，会盖住任务栏）区分开。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1920, h: 1040, maximized: true));
-
-		Assert.Contains("winposstr:s:0,3,", content);
-		Assert.DoesNotContain("winposstr:s:0,1,", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_MaximizedWindow_DoesNotUseFullScreenMode()
-	{
-		// 关键反例：最大化 ≠ 全屏。若同时写 screen mode id:2，mstsc 会独占整屏并盖住任务栏，
-		// 与需求（不遮任务栏）直接冲突。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1920, h: 1040, maximized: true));
-
-		Assert.Contains("screen mode id:i:1", content);
-		Assert.DoesNotContain("screen mode id:i:2", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_NonMaximizedWindow_UsesShowCmd1WithRestoreRect()
-	{
-		// 非最大化时给出 ShowCmd=1 的还原矩形，避免 mstsc 沿用 Default.rdp 里的旧位置。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1920, h: 1080, maximized: false));
-
-		Assert.Contains("winposstr:s:0,1,0,0,1926,1107", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_RestoreRect_AddsClientBorderAroundContent()
-	{
-		// 还原矩形必须比远程桌面内容大一圈（边框 6px、标题栏与下边框 27px），
-		// 否则内容会被窗口边框挤出一小截，出现本不该有的滚动条。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1280, h: 720, maximized: false));
-
-		Assert.Contains("winposstr:s:0,1,0,0,1286,747", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_MaximizedWindow_RespectsOriginForMultiMonitor()
-	{
-		// 多显示器下 winposstr 用绝对桌面坐标；原点决定窗口落在哪块屏。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1920, h: 1040, maximized: true, left: 2560, top: 0));
-
-		Assert.Contains("winposstr:s:0,3,2560,0,4486,1067", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_NoResolution_EmitsNoWinPosStr()
-	{
-		// 无尺寸档（「全屏」）不写 winposstr：全屏由 screen mode id:2 决定，
-		// 混写两者会让 mstsc 行为不可预期。
-		string content = RdpLauncher.BuildRdpContent(Opt(maximized: false));
-
-		Assert.Contains("screen mode id:i:2", content);
+		Assert.DoesNotContain("smart sizing", content);
+		Assert.DoesNotContain("dynamic resolution", content);
 		Assert.DoesNotContain("winposstr", content);
+		Assert.Contains("screen mode id:i:1", content);
+		Assert.Contains("desktopwidth:i:1280", content);
 	}
 }

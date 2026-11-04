@@ -44,8 +44,6 @@ public class AutoSaveOnConnectTests
 		FakeDialogService dialogs = new FakeDialogService();
 		RecordingLauncher launcher = new RecordingLauncher();
 		MainViewModel vm = new MainViewModel(db, crypto, dialogs, launcher);
-		// 「自适应」需要屏幕尺寸；测试环境无 UI 线程，给定固定值。
-		vm.ScreenWorkArea = () => (1920, 1040);
 		return (vm, db, dialogs, launcher);
 	}
 
@@ -150,22 +148,6 @@ public class AutoSaveOnConnectTests
 		Assert.Empty(vm.Connections);
 		Assert.Empty(tmp.NewService().LoadAll());
 		Assert.Contains(dialogs.Messages, m => m.Message.Contains("连接失败"));
-	}
-
-	[Fact]
-	public void Connect_UsesAdaptiveResolutionFromScreenWorkArea()
-	{
-		// 「自适应」档必须按注入的屏幕工作区算尺寸，而不是取写死的 1920*1080。
-		using TempDb tmp = new TempDb();
-		var (vm, _, _, launcher) = Create(tmp);
-		vm.Resolution = MainViewModel.MaximizedResolutionDisplayName;
-		vm.Host = "10.4.4.4";
-
-		vm.ConnectCommand.Execute(null);
-
-		RdpLauncher.RdpOptions opt = Assert.Single(launcher.Launched);
-		Assert.Equal(1920, opt.Width);
-		Assert.Equal(1040, opt.Height);
 	}
 
 	[Fact]

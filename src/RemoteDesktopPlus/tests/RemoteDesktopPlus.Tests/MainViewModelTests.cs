@@ -40,8 +40,8 @@ public class MainViewModelTests
 
 		Assert.Empty(vm.Connections);
 		Assert.Equal(3389, vm.Port);
-		Assert.Equal(MainViewModel.MaximizedResolutionDisplayName, vm.Resolution);
-		Assert.Equal(12, vm.ResolutionOptions.Count);
+		Assert.Equal("1920*1080", vm.Resolution);
+		Assert.Equal(11, vm.ResolutionOptions.Count);
 		Assert.True(vm.OptionsExpanded);
 	}
 
@@ -77,8 +77,8 @@ public class MainViewModelTests
 
 		MainViewModel vm = new MainViewModel(seed, new CryptoService(seed), new FakeDialogService());
 
-		// 越界值不采纳，回落到默认档（默认档现在是「自适应」）。
-		Assert.Equal(MainViewModel.MaximizedResolutionDisplayName, vm.Resolution);
+		// 越界值不采纳，回落到默认档 1920*1080（参数回退后恢复 v1.0.x 默认）。
+		Assert.Equal("1920*1080", vm.Resolution);
 	}
 
 	[Fact]

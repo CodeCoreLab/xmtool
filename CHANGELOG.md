@@ -24,6 +24,28 @@
   无法审计来源，会让克隆后的仓库体积膨胀、CI 缓存失效
 - 测试工程移除 6 处 HintPath（`PackageReference` 依赖可传递）
 
+## [1.2.1] - 2026-11-04
+
+### 修复
+
+- **远程画面模糊仍未消除 → .rdp 参数整体回退到 v1.0.x 形态**：v1.2.0 回退视觉键后
+  仍有残留嫌疑的参数（`smart sizing:i:1` 位图拉伸缩放、`dynamic resolution:i:1`、
+  `winposstr` 窗口摆放、无损效率键组）全部移除。`.rdp` 只保留连接必需键
+  （地址/账号/CredSSP/screen mode/desktopsize/剪贴板/磁盘共享/控制台），
+  画质完全由 mstsc 默认值决定 —— 与 v1.0.x（字体清晰时期）行为一致。
+- 保留项：剪贴板 `redirectclipboard:i:1` 与全盘 `drivestoredirect:s:*` 内置恒开
+  （用户明确要求的功能，与画质无关）；界面排版修复全部保留。
+
+### 移除
+
+- 分辨率「最大化（铺满可用区域，不遮任务栏）」档及其 `winposstr`/`smart sizing`/
+  `dynamic resolution` 依赖，默认分辨率恢复 `1920*1080`；`RdpOptions` 精简为
+  (Host, Port, User, Password, W, H, ForceConsole)。
+
+### 变更
+
+- 程序集版本 1.2.0 → 1.2.1
+
 ## [1.2.0] - 2026-11-04
 
 ### 修复
