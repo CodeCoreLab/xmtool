@@ -60,10 +60,8 @@ public class MainViewModelTests
 		MainViewModel vm = new MainViewModel(seed, crypto, dialogs);
 
 		Assert.Equal("2560*1440", vm.Resolution);
-		Assert.True(vm.RedirectLocalDrive);
 		Assert.True(vm.ForceConsole);
-		// 盘符共享已固定为全部盘符：历史库里的 "D" 必须被忽略，不能把共享范围缩回单盘。
-		Assert.True(vm.BuildEffectiveOptions(new ConnectionItem { Host = "h", Port = 3389 }).LocalDriveLetter == "*");
+		// 历史键（盘符/剪贴板/流畅档）读到即忽略：不再有对应可观察属性。
 
 		// 加载期间必须抑制回写：否则会把「非法但已存的值」覆盖成默认值。
 		DatabaseService verify = tmp.NewService();

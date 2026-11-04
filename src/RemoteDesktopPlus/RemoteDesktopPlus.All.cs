@@ -332,14 +332,16 @@ public static class SettingKeys
 
 	public const string OptionResolution = "options.resolution";
 
+	/// <summary>
+	/// 历史键：盘符/剪贴板共享曾是界面开关（v1.2.0 起内置默认开启、界面不再提供），
+	/// 流畅优先档已整体回退。三个键在旧库里可能有残留值，读到即忽略，不再有写入路径。
+	/// </summary>
 	public const string OptionRedirectDrive = "options.redirect_drive";
 
-	/// <summary>流畅优先档（低带宽 + 低渲染负担的 .rdp 调优键）。默认 true。</summary>
 	public const string OptionPerformanceMode = "options.performance_mode";
 
 	/// <summary>
 	/// 历史键：盘符共享曾是「全部盘符 / 单个盘符」二选一，现固定为全部盘符。
-	/// 常量保留只为兼容旧库里的残留值（读到即忽略），不再有任何写入路径。
 	/// </summary>
 	public const string OptionLocalDriveLetter = "options.local_drive_letter";
 
@@ -860,19 +862,17 @@ public sealed class GroupOptions
 	/// <summary>为空表示继承全局设置。</summary>
 	public string? Resolution { get; set; }
 
-	/// <summary>为空表示继承全局设置。</summary>
+	/// <summary>
+	/// 历史字段：盘符共享范围 / 剪贴板 / 磁盘 / 流畅优先的组覆盖均已移除
+	/// （v1.2.0：剪贴板与磁盘内置恒开、流畅档回退），属性保留只为旧 JSON
+	/// 反序列化不报未知字段，读取后一律忽略。
+	/// </summary>
 	public bool? RedirectClipboard { get; set; }
 
-	/// <summary>为空表示继承全局设置。</summary>
 	public bool? RedirectLocalDrive { get; set; }
 
-	/// <summary>为空表示继承全局设置。流畅优先：低带宽 + 低渲染负担档。</summary>
 	public bool? PerformanceMode { get; set; }
 
-	/// <summary>
-	/// 历史字段：盘符共享范围。共享范围已固定为全部盘符，此字段仅用于读取历史
-	/// JSON 时被忽略（保留属性名以免反序列化遇到未知字段）。
-	/// </summary>
 	public string? LocalDriveLetter { get; set; }
 }
 
@@ -937,11 +937,7 @@ public sealed class GroupOptionStore
 
 	private static bool IsAllInherited(GroupOptions o)
 	{
-		return o.Resolution == null
-			&& o.RedirectClipboard == null
-			&& o.RedirectLocalDrive == null
-			&& o.PerformanceMode == null
-			&& o.LocalDriveLetter == null;
+		return o.Resolution == null;
 	}
 
 	private Dictionary<string, GroupOptions> Load()
@@ -1605,21 +1601,6 @@ using System.Threading.Tasks;
 /// </summary>
 public static class RdpLauncher
 {
-	/// <param name="RedirectClipboard">
-	/// 是否启用剪贴板重定向（默认 true）。
-	/// 缺省为 true 是刻意的：本地与远程之间复制粘贴属于基本预期，
-	/// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理（不是按 UI 默认勾选）。
-	/// </param>
-	/// <param name="LocalDriveLetter">
-	/// 要重定向的盘符。固定传 <see cref="AllDrivesToken"/>：共享范围不再提供单选盘符，
-	/// 全盘符是动态的（连接后新插的 U 盘也会重定向）。
-	/// </param>
-	/// <param name="PerformanceMode">
-	/// 流畅优先（默认 true）。开启时按「低带宽 + 低渲染负担」档写出一组 mstsc 调优键：
-	/// 16 位色、关闭远程 DWM 合成/壁纸/窗口拖动/菜单动画、持久位图缓存、
-	/// 音频与打印机/串口/智能卡重定向全关。这些键正是「无 GPU 虚拟机 + 弱带宽」下
-	/// 卡顿的主要降项（收益顺序：颜色深度 &gt; 合成与动画 &gt; 缓存 &gt; 外设重定向）。
-	/// </param>
 	/// <param name="DynamicResolution">
 	/// 是否允许会话内随客户端窗口变化动态改分辨率（默认 true）。
 	/// 对应 RDP 8.1+ 的 <c>dynamic resolution</c> 键；窗口拖动后画面不失真、不重连。
@@ -1635,7 +1616,7 @@ public static class RdpLauncher
 	/// </param>
 	/// <param name="WindowLeft">还原态窗口左边（多显示器下决定落在哪块屏）。</param>
 	/// <param name="WindowTop">还原态窗口上边。</param>
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true, bool PerformanceMode = true, bool DynamicResolution = true, bool WindowMaximized = false, int WindowLeft = 0, int WindowTop = 0)
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool ForceConsole, bool DynamicResolution = true, bool WindowMaximized = false, int WindowLeft = 0, int WindowTop = 0)
 	{
 		/// <summary>
 		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
@@ -1643,32 +1624,6 @@ public static class RdpLauncher
 		/// 因为它同时覆盖已有盘与后插的 U 盘/移动硬盘。
 		/// </summary>
 		public const string AllDrivesToken = "*";
-
-		/// <summary>
-		/// 把盘符规范成 RDP 规范要求的 `D:\;` 形态。
-		/// 规范来源：drivestoredirect 的官方示例为 `C:\;E:\;` —— 每个盘符带尾随反斜杠，
-		/// 并以分号结尾。历史实现只写 `D:`，属于不完整语法（mstsc 可能宽松接受，
-		/// 但不符合规范，且多盘符时无法拼接）。
-		/// </summary>
-		public static string NormalizeDriveSpec(string? letter)
-		{
-			if (string.IsNullOrWhiteSpace(letter))
-			{
-				return string.Empty;
-			}
-			string trimmed = letter.Trim();
-			if (AllDrivesToken.Equals(trimmed, StringComparison.Ordinal))
-			{
-				return AllDrivesToken;
-			}
-			// 归一成单字母：接受 "D"、"D:"、"D:\" 三种输入
-			char drive = char.ToUpperInvariant(trimmed[0]);
-			if (drive < 'A' || drive > 'Z')
-			{
-				return string.Empty;
-			}
-			return $"{drive}:\\;";
-		}
 	}
 
 	private static IRdpBackend _backend = WindowsRdpBackend.Instance;
@@ -1801,28 +1756,16 @@ public static class RdpLauncher
 			sb.AppendLine($"winposstr:s:0,1,{opt.WindowLeft},{opt.WindowTop},{RestoreRight(opt)},{RestoreBottom(opt)}");
 		}
 
-		if (opt.PerformanceMode)
-		{
-			AppendPerformanceKeys(sb);
-		}
+		// 无损效率键：只保留对画面视觉零影响的传输/通道优化。
+		AppendEfficiencyKeys(sb);
 
-		// 剪贴板重定向：mstsc 对此键**显式关闭优先**，键缺失时按禁用处理，
-		// 故必须显式写出 i:1，不能依赖「未写就默认开」。
-		sb.AppendLine($"redirectclipboard:i:{(opt.RedirectClipboard ? 1 : 0)}");
+		// 剪贴板重定向写死开启：本地与远程互拷是运维基本预期，不再提供界面开关；
+		// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理，必须显式 i:1。
+		sb.AppendLine("redirectclipboard:i:1");
 
-		// 驱动器重定向三种取值（Microsoft RDP 属性规范）：
-		//   键缺失 / 值空 → 不重定向
-		//   *            → 全部驱动器，**含连接之后接入的**（动态，比逐个枚举更彻底）
-		//   C:\;E:\;     → 指定盘符（每个盘符带尾随反斜杠，分号分隔）
+		// 驱动器重定向写死全部盘符（* 含连接之后接入的 U 盘），不再提供界面开关。
 		// 注意 * 后面**不能**再跟冒号，`s:*:` 是非法语法，会导致整段重定向失效。
-		if (opt.RedirectLocalDrive)
-		{
-			string driveSpec = RdpOptions.NormalizeDriveSpec(opt.LocalDriveLetter);
-			if (!string.IsNullOrEmpty(driveSpec))
-			{
-				sb.AppendLine($"drivestoredirect:s:{driveSpec}");
-			}
-		}
+		sb.AppendLine($"drivestoredirect:s:{RdpOptions.AllDrivesToken}");
 		if (opt.ForceConsole)
 		{
 			sb.AppendLine("connect to console:i:1");
@@ -1863,41 +1806,30 @@ public static class RdpLauncher
 	private const int RestoreBorderHeight = 27;
 
 	/// <summary>
-	/// 追加「流畅优先」档的 mstsc 调优键。
+	/// 追加**无损**效率键：只保留对画面视觉零影响的传输/通道优化。
 	/// <para>
-	/// 每条都可追溯到「远程画面卡顿」的一个具体成因，不是凭感觉堆参数：
-	/// 颜色深度 → 编码数据量；合成/壁纸/窗口拖动/菜单动画 → 服务端（无 GPU 时用 CPU）
-	/// 软渲染并逐帧编码的负担；位图缓存 → 静态区域重复传输；外设重定向 → 通道开销。
+	/// 「流畅优先」档（session bpp 16、connection type 低带宽、关 DWM 合成/壁纸/动画、
+	/// videoplaybackmode 0）已于 v1.2.0 回退 —— 这些键直接改变画面视觉质量：
+	/// 16 位色下 ClearType 子像素渲染不可用、低带宽档禁用字体平滑并激进压缩、
+	/// 关 DWM 合成使 ClearType 退化为灰度，叠加表现即「远程字体发糊」。
 	/// </para>
 	/// <para>
-	/// 刻意**不关**的两项：<c>allow font smoothing</c> 保留（ClearType 是静态抗锯齿，
-	/// 不产生逐帧开销，关掉只会让远程终端文字变糊）；<c>disable themes</c> 保持 0
-	/// （主题关掉会破坏远程会话里的控件外观，收益远小于代价）。
+	/// 保留项对画质零影响：压缩与持久位图缓存只减少传输量、不改变像素值；
+	/// 音频/外设重定向关闭只省通道开销。字体清晰度由 <c>allow font smoothing:i:1</c>
+	/// 显式锁定（mstsc 对键缺失的处理依连接档位而定，显式写出最稳）。
 	/// </para>
 	/// </summary>
-	private static void AppendPerformanceKeys(StringBuilder sb)
+	private static void AppendEfficiencyKeys(StringBuilder sb)
 	{
-		// 16 位色把每像素编码量减半，是单项收益最大的一条。
-		sb.AppendLine("session bpp:i:16");
-		// 强制「低带宽」连接档，并关掉自动检测：自动检测会把间歇抖动判成大流量，
-		// 反而触发更激进的重传/画质调整，在跨网段链路上表现为忽快忽慢。
-		sb.AppendLine("connection type:i:1");
-		sb.AppendLine("networkautodetect:i:0");
-		sb.AppendLine("bandwidthautodetect:i:0");
+		// RDP 压缩：传输量优化，解码后像素不变，无视觉损失。
 		sb.AppendLine("compression:i:1");
+		// 字体平滑（ClearType）显式开启：静态抗锯齿，无逐帧开销。
 		sb.AppendLine("allow font smoothing:i:1");
-		// 关远程 DWM 合成：无 GPU 的虚拟机上 DWM 全靠 CPU 软渲染，每帧都要编码。
-		sb.AppendLine("allow desktop composition:i:0");
-		sb.AppendLine("disable wallpaper:i:1");
-		sb.AppendLine("disable full window drag:i:1");
-		sb.AppendLine("disable menu anims:i:1");
-		sb.AppendLine("disable cursor setting:i:1");
 		// 持久位图缓存：同一片静态区域（如终端窗口）不再每帧重传。
 		sb.AppendLine("bitmapcachepersistenable:i:1");
-		// 视频走兼容模式，避开 H.264 管道的花屏与带宽尖峰。
-		sb.AppendLine("videoplaybackmode:i:0");
-		// 跳板机上远程音频无用途：0=留在远程、1=本地播放、2=不播放（省一路音频通道）。
+		// 跳板机上远程音频无用途：2=不播放，省一路音频通道。
 		sb.AppendLine("audiomode:i:2");
+		// 外设重定向全关：省通道开销，跳板机场景无用途。
 		sb.AppendLine("redirectprinters:i:0");
 		sb.AppendLine("redirectcomports:i:0");
 		sb.AppendLine("redirectsmartcards:i:0");
@@ -2731,31 +2663,8 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private string resolution = MaximizedResolutionDisplayName;
 
-	/// <summary>
-	/// 盘符重定向开关。默认开启 —— 「本地与目标之间传文件」是这类工具的主要用途之一，
-	/// 默认关闭会让人先遇到「拷不了文件」再回来找开关。
-	/// <para>
-	/// 共享范围固定为**全部盘符**（协议取值 <see cref="RdpLauncher.RdpOptions.AllDrivesToken"/>）：
-	/// 逐个选盘符既多一步操作，又会在连接后新插的 U 盘上失效，已移除该选项。
-	/// </para>
-	/// </summary>
-	[ObservableProperty]
-	private bool redirectLocalDrive = true;
-
-	/// <summary>
-	/// 流畅优先：按「低带宽 + 低渲染负担」档生成 .rdp（16 位色、关远程合成/动画/壁纸、
-	/// 持久位图缓存、外设重定向全关）。默认开启 —— 目标是让远程画面顺滑，
-	/// 关掉它等于放弃该项优化；需要无损画质时可临时关闭。
-	/// </summary>
-	[ObservableProperty]
-	private bool performanceMode = true;
-
 	[ObservableProperty]
 	private bool forceConsole;
-
-	/// <summary>剪贴板重定向开关，默认开启（见 RdpOptions.RedirectClipboard 的说明）。</summary>
-	[ObservableProperty]
-	private bool redirectClipboard = true;
 
 	[ObservableProperty]
 	private bool optionsExpanded = true;
@@ -2932,15 +2841,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	}
 
 	/// <summary>
-	/// 盘符共享：固定为全部盘符，不再提供单选。逐个选盘符既多一步操作，
-	/// 又会在连接后新插的 U 盘上失效；`*` 是动态的，覆盖已有盘与后插设备。
-	/// </summary>
-	public const string AllDrivesDisplayName = "全部盘符";
-
-	/// <summary>盘符共享范围对应的协议取值（UI 不再暴露选择，恒为全部盘符）。</summary>
-	private const string SharedDriveSpec = RdpLauncher.RdpOptions.AllDrivesToken;
-
-	/// <summary>
 	/// 唯一构造入口——组合根显式传入协作者，测试可注入临时库与假对话框。
 	/// （原先只能靠静态单例，导致视图模型的行为无法在测试里单独观察。）
 	/// <paramref name="launcher"/> 为 RDP 启动抽象（P1-3 实例化）；
@@ -2972,23 +2872,12 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				Resolution = setting;
 			}
-			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionRedirectDrive), out var result))
-			{
-				RedirectLocalDrive = result;
-			}
-			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionPerformanceMode), out var result4))
-			{
-				PerformanceMode = result4;
-			}
 			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionForceConsole), out var result2))
 			{
 				ForceConsole = result2;
 			}
-			// 无历史设置时保持字段默认 true（首次运行也默认开启剪贴板）
-			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionRedirectClipboard), out var result3))
-			{
-				RedirectClipboard = result3;
-			}
+			// OptionRedirectDrive / OptionPerformanceMode / OptionRedirectClipboard 为历史键：
+			// 三项已内置默认（剪贴板与磁盘恒开、流畅档回退），读到即忽略。
 			SortByRecent = string.Equals(_db.GetSetting(SettingKeys.OptionSortMode), "recent", StringComparison.OrdinalIgnoreCase);
 		}
 		finally
@@ -3101,35 +2990,11 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
-	partial void OnRedirectLocalDriveChanged(bool value)
-	{
-		if (!_suppressOptionSave)
-		{
-			_db.SetSetting(SettingKeys.OptionRedirectDrive, value.ToString());
-		}
-	}
-
-	partial void OnPerformanceModeChanged(bool value)
-	{
-		if (!_suppressOptionSave)
-		{
-			_db.SetSetting(SettingKeys.OptionPerformanceMode, value.ToString());
-		}
-	}
-
 	partial void OnForceConsoleChanged(bool value)
 	{
 		if (!_suppressOptionSave)
 		{
 			_db.SetSetting(SettingKeys.OptionForceConsole, value.ToString());
-		}
-	}
-
-	partial void OnRedirectClipboardChanged(bool value)
-	{
-		if (!_suppressOptionSave)
-		{
-			_db.SetSetting(SettingKeys.OptionRedirectClipboard, value.ToString());
 		}
 	}
 
@@ -3235,9 +3100,6 @@ public partial class MainViewModel
 		GroupOptions? group = _groupOptions.Get(item.GroupName);
 
 		string resolution = group?.Resolution ?? Resolution;
-		bool redirectClipboard = group?.RedirectClipboard ?? RedirectClipboard;
-		bool redirectDrive = group?.RedirectLocalDrive ?? RedirectLocalDrive;
-		bool performance = group?.PerformanceMode ?? PerformanceMode;
 
 		var (width, height) = ParseResolution(resolution, ScreenWorkArea);
 		// 「最大化」档：让远程桌面窗口铺满工作区且不盖任务栏（winposstr ShowCmd=3）。
@@ -3250,11 +3112,7 @@ public partial class MainViewModel
 			_crypto.Decrypt(item.EncryptedPassword),
 			width,
 			height,
-			redirectDrive,
-			SharedDriveSpec,
 			ForceConsole,
-			redirectClipboard,
-			performance,
 			true,
 			maximized,
 			origin.left,
@@ -3538,11 +3396,7 @@ public partial class MainViewModel
 			Password,
 			width,
 			height,
-			RedirectLocalDrive,
-			SharedDriveSpec,
 			ForceConsole,
-			RedirectClipboard,
-			PerformanceMode,
 			true,
 			maximized,
 			origin.left,
@@ -4264,21 +4118,6 @@ public partial class GroupSettingsWindow : Window
 			OverrideResolution.IsChecked = true;
 			ResolutionBox.SelectedItem = opt.Resolution;
 		}
-		if (opt.RedirectClipboard != null)
-		{
-			OverrideClipboard.IsChecked = true;
-			ClipboardValue.IsChecked = opt.RedirectClipboard.Value;
-		}
-		if (opt.RedirectLocalDrive != null)
-		{
-			OverrideDrive.IsChecked = true;
-			DriveValue.IsChecked = opt.RedirectLocalDrive.Value;
-		}
-		if (opt.PerformanceMode != null)
-		{
-			OverridePerformance.IsChecked = true;
-			PerformanceValue.IsChecked = opt.PerformanceMode.Value;
-		}
 		UpdateEnabledState();
 	}
 
@@ -4290,26 +4129,12 @@ public partial class GroupSettingsWindow : Window
 
 	private void UpdateEnabledState()
 	{
-		bool res = OverrideResolution.IsChecked == true;
-		bool clip = OverrideClipboard.IsChecked == true;
-		bool drive = OverrideDrive.IsChecked == true;
-		bool perf = OverridePerformance.IsChecked == true;
-
-		ResolutionBox.IsEnabled = res;
-		ClipboardValue.IsEnabled = clip;
-		DriveValue.IsEnabled = drive;
-		PerformanceValue.IsEnabled = perf;
+		ResolutionBox.IsEnabled = OverrideResolution.IsChecked == true;
 	}
 
 	private void ClearAll_Click(object sender, RoutedEventArgs e)
 	{
 		OverrideResolution.IsChecked = false;
-		OverrideClipboard.IsChecked = false;
-		OverrideDrive.IsChecked = false;
-		OverridePerformance.IsChecked = false;
-		ClipboardValue.IsChecked = false;
-		DriveValue.IsChecked = false;
-		PerformanceValue.IsChecked = false;
 		UpdateEnabledState();
 		MessageBox.Show("已清除全部覆盖项，保存后本组将完全继承全局设置。", "提示");
 	}
@@ -4326,18 +4151,6 @@ public partial class GroupSettingsWindow : Window
 		if (OverrideResolution.IsChecked == true && ResolutionBox.SelectedItem is string r)
 		{
 			opt.Resolution = r;
-		}
-		if (OverrideClipboard.IsChecked == true)
-		{
-			opt.RedirectClipboard = ClipboardValue.IsChecked == true;
-		}
-		if (OverrideDrive.IsChecked == true)
-		{
-			opt.RedirectLocalDrive = DriveValue.IsChecked == true;
-		}
-		if (OverridePerformance.IsChecked == true)
-		{
-			opt.PerformanceMode = PerformanceValue.IsChecked == true;
 		}
 		// 全部字段为空时 Set 会移除该组条目，等价于「恢复全继承」。
 		_store.Set(_groupName, opt);

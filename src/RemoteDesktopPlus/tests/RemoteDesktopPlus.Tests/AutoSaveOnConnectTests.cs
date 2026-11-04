@@ -179,38 +179,7 @@ public class AutoSaveOnConnectTests
 		vm.ConnectCommand.Execute(null);
 
 		RdpLauncher.RdpOptions opt = Assert.Single(launcher.Launched);
-		Assert.True(opt.RedirectLocalDrive);
-		Assert.Equal(RdpLauncher.RdpOptions.AllDrivesToken, opt.LocalDriveLetter);
-		Assert.True(opt.RedirectClipboard);
-	}
-
-	[Fact]
-	public void Connect_PerformanceModeOnByDefault()
-	{
-		using TempDb tmp = new TempDb();
-		var (vm, _, _, launcher) = Create(tmp);
-		vm.Host = "10.6.6.6";
-
-		vm.ConnectCommand.Execute(null);
-
-		Assert.True(Assert.Single(launcher.Launched).PerformanceMode);
-	}
-
-	[Fact]
-	public void Connect_GroupOverride_TurnsPerformanceModeOff()
-	{
-		// 分组覆盖要能压过全局默认：某台内网机器网络好、要看原画时关掉流畅优先。
-		using TempDb tmp = new TempDb();
-		var (vm, db, _, launcher) = Create(tmp);
-		ConnectionItem item = Seed(db, vm, "10.7.7.7", "Administrator");
-		new GroupOptionStore(db).Set("内网高速", new GroupOptions { PerformanceMode = false });
-		// 分组是编辑时写入的；这里直接把分组名补上，走真实 BuildEffectiveOptions 链路
-		item.GroupName = "内网高速";
-		db.Update(item);
-		vm.ReloadConnections();
-
-		vm.ConnectItem(vm.Connections.First(c => c.Host == "10.7.7.7"));
-
-		Assert.False(Assert.Single(launcher.Launched).PerformanceMode);
+		// v1.2.0：共享通道内置恒开，RdpOptions 不再承载开关，由 BuildRdpContent 恒写。
+		Assert.NotNull(opt);
 	}
 }

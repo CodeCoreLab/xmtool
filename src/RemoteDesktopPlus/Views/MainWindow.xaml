@@ -377,16 +377,9 @@
                         <ComboBox Grid.Column="1" MinHeight="40" ItemsSource="{Binding ResolutionOptions}" SelectedItem="{Binding Resolution}" />
                       </Grid>
                       <StackPanel Margin="0,14,0,0">
-                        <!-- 标签列 96 与上方「分辨率」标签对齐，勾选框落在同一竖线上（初版排布）。 -->
-                        <StackPanel Orientation="Horizontal">
-                          <CheckBox Content="共享本地磁盘" IsChecked="{Binding RedirectLocalDrive}" VerticalAlignment="Center" MinWidth="96" />
-                          <TextBlock Text="全部盘符（双向，含后插 U 盘）" Style="{StaticResource FieldLabel}" VerticalAlignment="Center" Margin="8,0,0,0" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
-                          <CheckBox Content="共享剪贴板" IsChecked="{Binding RedirectClipboard}" VerticalAlignment="Center" MinWidth="96" />
-                          <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" Margin="8,0,0,0" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <CheckBox Content="流畅优先（低带宽 + 低渲染负担）" IsChecked="{Binding PerformanceMode}" Margin="0,10,0,0" ToolTip="16 位色、关闭远程合成/壁纸/窗口拖动/菜单动画、持久位图缓存、外设重定向全关。目标机无 GPU 或带宽受限时明显更顺滑；需要无损画质可关闭" />
+                        <!-- 剪贴板与本地磁盘共享已内置恒开（v1.2.0），不再提供勾选；
+                             .rdp 恒写 redirectclipboard:i:1 与 drivestoredirect:s:*。 -->
+                        <CheckBox Content="强制控制台模式" IsChecked="{Binding ForceConsole}" VerticalAlignment="Center" />
                       </StackPanel>
                     </StackPanel>
                   </Border>
@@ -446,7 +439,7 @@
                      这些控件自动换到下一行，不会把「按最近连接排序」挤出可视区。 -->
                 <WrapPanel Grid.Row="1" Margin="28,14,28,14" Orientation="Horizontal">
                   <ComboBox Width="150" Height="34" Margin="0,0,8,0" VerticalAlignment="Center" ItemsSource="{Binding GroupFilterOptions}" SelectedItem="{Binding SelectedGroupFilter}" ToolTip="按分组筛选列表；分组名在连接的编辑对话框里设置" />
-                  <Button Content="组设置…" Style="{StaticResource ButtonSecondary}" Height="34" Padding="12,0" Margin="0,0,16,0" Command="{Binding EditGroupOptionsCommand}" ToolTip="为当前选中的分组覆盖分辨率 / 流畅优先 / 剪贴板 / 磁盘共享（需先选中具体分组）" />
+                  <Button Content="组设置…" Style="{StaticResource ButtonSecondary}" Height="34" Padding="12,0" Margin="0,0,16,0" Command="{Binding EditGroupOptionsCommand}" ToolTip="为当前选中的分组覆盖分辨率（需先选中具体分组）" />
                   <CheckBox Content="按最近连接排序" IsChecked="{Binding SortByRecent}" VerticalAlignment="Center" ToolTip="勾选后按最后使用时间倒序；取消则回到手动拖拽顺序" />
                 </WrapPanel>
 

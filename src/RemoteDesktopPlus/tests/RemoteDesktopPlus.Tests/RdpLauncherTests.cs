@@ -55,16 +55,12 @@ public class RdpLauncherTests
 		string password = "S3cr3t!",
 		int? w = null,
 		int? h = null,
-		bool redirect = false,
-		string? letter = "D",
 		bool forceConsole = false,
-		bool clipboard = true,
-		bool performance = true,
 		bool maximized = false,
 		int left = 0,
 		int top = 0)
 	{
-		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, redirect, letter, forceConsole, clipboard, performance, true, maximized, left, top);
+		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, forceConsole, true, maximized, left, top);
 	}
 
 	private static T WithRecordingBackend<T>(Func<RecordingRdpBackend, T> body, out RecordingRdpBackend backend)
@@ -122,39 +118,14 @@ public class RdpLauncherTests
 	}
 
 	[Fact]
-	public void BuildRdpContent_RedirectDrive_RequiresBothFlagAndLetter()
+	public void BuildRdpContent_AlwaysRedirectsAllDrives()
 	{
-		// 规范语法：每个盘符带尾随反斜杠并以分号结尾（官方示例 C:\;E:\;）。
-		Assert.Contains(@"drivestoredirect:s:D:\;", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "D")));
-		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: false, letter: "D")));
-		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "")));
-		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: null)));
-	}
-
-	[Fact]
-	public void BuildRdpContent_RedirectAllDrives_EmitsStarWithoutTrailingColon()
-	{
-		// `*` 覆盖全部驱动器且是动态的（连接后插入的 U 盘也会重定向）。
+		// v1.2.0 起磁盘共享内置恒开：恒写 `*`（动态覆盖全部驱动器，含后插 U 盘）。
 		// 关键：绝对不能写成 `s:*:` —— 那是非法语法，会让整段重定向失效。
-		string content = RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "*"));
+		string content = RdpLauncher.BuildRdpContent(Opt());
 
 		Assert.Contains("drivestoredirect:s:*", content);
 		Assert.DoesNotContain("drivestoredirect:s:*:", content);
-	}
-
-	[Theory]
-	[InlineData("D", @"D:\;")]
-	[InlineData("D:", @"D:\;")]
-	[InlineData(@"D:\", @"D:\;")]
-	[InlineData("d", @"D:\;")]
-	[InlineData("*", "*")]
-	[InlineData("", "")]
-	[InlineData(null, "")]
-	[InlineData("1", "")]
-	public void NormalizeDriveSpec_AcceptsCommonInputShapes(string? input, string expected)
-	{
-		// 归一化集中在一处，避免调用方传入 "D"/"D:"/"D:\" 任一形态时输出不一致。
-		Assert.Equal(expected, RdpLauncher.RdpOptions.NormalizeDriveSpec(input));
 	}
 
 	[Fact]
@@ -173,10 +144,12 @@ public class RdpLauncherTests
 	}
 
 	[Fact]
-	public void BuildRdpContent_Clipboard_CanBeDisabledExplicitly()
+	public void BuildRdpContent_Clipboard_AlwaysExplicitlyEnabled()
 	{
-		Assert.Contains("redirectclipboard:i:0", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
-		Assert.DoesNotContain("redirectclipboard:i:1", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
+		// v1.2.0 起剪贴板共享内置恒开，且必须显式 i:1（键缺失 mstsc 按禁用处理）。
+		string content = RdpLauncher.BuildRdpContent(Opt());
+		Assert.DoesNotContain("redirectclipboard:i:0", content);
+		Assert.Contains("redirectclipboard:i:1", content);
 	}
 
 	[Fact]
@@ -339,49 +312,49 @@ public class RdpLauncherTests
 		Assert.StartsWith(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), RdpLauncher.GetTempDirectory());
 	}
 
-	// ─────────────────── 流畅优先档（低带宽 + 低渲染负担） ───────────────────
+	// ─────────────────── 无损效率档（v1.2.0：流畅档视觉项全部回退） ───────────────────
 
 	[Fact]
-	public void BuildRdpContent_PerformanceMode_EmitsBandwidthAndRenderKeys()
+	public void BuildRdpContent_EmitsOnlyVisuallyLosslessEfficiencyKeys()
 	{
 		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900));
 
-		// 每条对应一个具体卡顿成因：颜色深度→编码量；连接档/自动检测→重传抖动；
-		// 合成与动画→服务端软渲染负担；位图缓存→静态区重复传输；外设→通道开销。
-		Assert.Contains("session bpp:i:16", content);
-		Assert.Contains("connection type:i:1", content);
-		Assert.Contains("networkautodetect:i:0", content);
-		Assert.Contains("bandwidthautodetect:i:0", content);
-		Assert.Contains("allow desktop composition:i:0", content);
-		Assert.Contains("disable wallpaper:i:1", content);
-		Assert.Contains("disable full window drag:i:1", content);
-		Assert.Contains("disable menu anims:i:1", content);
+		// 保留项全部对画质零影响：压缩/位图缓存只减传输量，外设与音频只省通道。
+		Assert.Contains("compression:i:1", content);
 		Assert.Contains("bitmapcachepersistenable:i:1", content);
-		Assert.Contains("videoplaybackmode:i:0", content);
 		Assert.Contains("audiomode:i:2", content);
+		Assert.Contains("redirectprinters:i:0", content);
+		Assert.Contains("redirectsmartcards:i:0", content);
+		Assert.Contains("allow font smoothing:i:1", content);
 	}
 
 	[Fact]
-	public void BuildRdpContent_PerformanceModeOff_EmitsNoneOfThoseKeys()
+	public void BuildRdpContent_NeverEmitsVisualQualityKeys()
 	{
-		// 关闭后必须彻底不写，否则「关了还在优化」会让用户以为设置无效。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900, performance: false));
+		// 字体发糊的三大根因（16 位色无 ClearType / 低带宽档禁平滑与激进压缩 /
+		// 关 DWM 合成使 ClearType 退化）必须整体缺席，回退后不得再写出。
+		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900));
 
 		Assert.DoesNotContain("session bpp", content);
+		Assert.DoesNotContain("connection type", content);
+		Assert.DoesNotContain("networkautodetect", content);
+		Assert.DoesNotContain("bandwidthautodetect", content);
 		Assert.DoesNotContain("allow desktop composition", content);
-		Assert.DoesNotContain("bitmapcachepersistenable", content);
-		Assert.DoesNotContain("audiomode", content);
+		Assert.DoesNotContain("disable wallpaper", content);
+		Assert.DoesNotContain("disable full window drag", content);
+		Assert.DoesNotContain("disable menu anims", content);
+		Assert.DoesNotContain("disable cursor setting", content);
+		Assert.DoesNotContain("videoplaybackmode", content);
 	}
 
 	[Fact]
-	public void BuildRdpContent_KeepsFontSmoothing_AndClipboardInPerformanceMode()
+	public void BuildRdpContent_SharedChannels_AlwaysOn()
 	{
-		// 这两项是刻意保留的：ClearType 无逐帧开销（关掉只会让终端文字变糊）；
-		// 剪贴板是运维主力功能，不能被性能档顺手关掉。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900, clipboard: true));
+		// 剪贴板与磁盘共享内置恒开，不受任何设置影响。
+		string content = RdpLauncher.BuildRdpContent(Opt());
 
-		Assert.Contains("allow font smoothing:i:1", content);
 		Assert.Contains("redirectclipboard:i:1", content);
+		Assert.Contains("drivestoredirect:s:*", content);
 	}
 
 	[Fact]

@@ -42,10 +42,7 @@ public class HardeningTests
 			"pw",
 			null,
 			null,
-			false,
-			null,
-			false,
-			true));
+			false));
 
 		// 注入内容必须被压成同一行，不能形成新的配置项。
 		Assert.DoesNotContain("full address:s:10.0.0.1\r\n", content);
