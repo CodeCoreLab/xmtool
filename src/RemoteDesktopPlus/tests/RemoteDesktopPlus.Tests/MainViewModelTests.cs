@@ -60,8 +60,9 @@ public class MainViewModelTests
 		MainViewModel vm = new MainViewModel(seed, crypto, dialogs);
 
 		Assert.Equal("2560*1440", vm.Resolution);
+		Assert.True(vm.RedirectLocalDrive);
 		Assert.True(vm.ForceConsole);
-		// 历史键（盘符/剪贴板/流畅档）读到即忽略：不再有对应可观察属性。
+		Assert.Equal("D", vm.LocalDriveLetter);
 
 		// 加载期间必须抑制回写：否则会把「非法但已存的值」覆盖成默认值。
 		DatabaseService verify = tmp.NewService();
@@ -77,7 +78,6 @@ public class MainViewModelTests
 
 		MainViewModel vm = new MainViewModel(seed, new CryptoService(seed), new FakeDialogService());
 
-		// 越界值不采纳，回落到默认档 1920*1080（参数回退后恢复 v1.0.x 默认）。
 		Assert.Equal("1920*1080", vm.Resolution);
 	}
 

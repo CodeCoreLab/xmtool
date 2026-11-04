@@ -55,9 +55,12 @@ public class RdpLauncherTests
 		string password = "S3cr3t!",
 		int? w = null,
 		int? h = null,
-		bool forceConsole = false)
+		bool redirect = false,
+		string? letter = "D",
+		bool forceConsole = false,
+		bool clipboard = true)
 	{
-		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, forceConsole);
+		return new RdpLauncher.RdpOptions(host, port, user, password, w, h, redirect, letter, forceConsole, clipboard);
 	}
 
 	private static T WithRecordingBackend<T>(Func<RecordingRdpBackend, T> body, out RecordingRdpBackend backend)
@@ -115,14 +118,39 @@ public class RdpLauncherTests
 	}
 
 	[Fact]
-	public void BuildRdpContent_AlwaysRedirectsAllDrives()
+	public void BuildRdpContent_RedirectDrive_RequiresBothFlagAndLetter()
 	{
-		// v1.2.0 起磁盘共享内置恒开：恒写 `*`（动态覆盖全部驱动器，含后插 U 盘）。
+		// 规范语法：每个盘符带尾随反斜杠并以分号结尾（官方示例 C:\;E:\;）。
+		Assert.Contains(@"drivestoredirect:s:D:\;", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "D")));
+		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: false, letter: "D")));
+		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "")));
+		Assert.DoesNotContain("drivestoredirect", RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: null)));
+	}
+
+	[Fact]
+	public void BuildRdpContent_RedirectAllDrives_EmitsStarWithoutTrailingColon()
+	{
+		// `*` 覆盖全部驱动器且是动态的（连接后插入的 U 盘也会重定向）。
 		// 关键：绝对不能写成 `s:*:` —— 那是非法语法，会让整段重定向失效。
-		string content = RdpLauncher.BuildRdpContent(Opt());
+		string content = RdpLauncher.BuildRdpContent(Opt(redirect: true, letter: "*"));
 
 		Assert.Contains("drivestoredirect:s:*", content);
 		Assert.DoesNotContain("drivestoredirect:s:*:", content);
+	}
+
+	[Theory]
+	[InlineData("D", @"D:\;")]
+	[InlineData("D:", @"D:\;")]
+	[InlineData(@"D:\", @"D:\;")]
+	[InlineData("d", @"D:\;")]
+	[InlineData("*", "*")]
+	[InlineData("", "")]
+	[InlineData(null, "")]
+	[InlineData("1", "")]
+	public void NormalizeDriveSpec_AcceptsCommonInputShapes(string? input, string expected)
+	{
+		// 归一化集中在一处，避免调用方传入 "D"/"D:"/"D:\" 任一形态时输出不一致。
+		Assert.Equal(expected, RdpLauncher.RdpOptions.NormalizeDriveSpec(input));
 	}
 
 	[Fact]
@@ -141,12 +169,10 @@ public class RdpLauncherTests
 	}
 
 	[Fact]
-	public void BuildRdpContent_Clipboard_AlwaysExplicitlyEnabled()
+	public void BuildRdpContent_Clipboard_CanBeDisabledExplicitly()
 	{
-		// v1.2.0 起剪贴板共享内置恒开，且必须显式 i:1（键缺失 mstsc 按禁用处理）。
-		string content = RdpLauncher.BuildRdpContent(Opt());
-		Assert.DoesNotContain("redirectclipboard:i:0", content);
-		Assert.Contains("redirectclipboard:i:1", content);
+		Assert.Contains("redirectclipboard:i:0", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
+		Assert.DoesNotContain("redirectclipboard:i:1", RdpLauncher.BuildRdpContent(Opt(clipboard: false)));
 	}
 
 	[Fact]
@@ -307,52 +333,5 @@ public class RdpLauncherTests
 	public void GetTempDirectory_IsUnderSystemTemp()
 	{
 		Assert.StartsWith(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), RdpLauncher.GetTempDirectory());
-	}
-
-	// ─────────────────── 参数回退（v1.2.1：.rdp 回到 v1.0.x 纯净形态） ───────────────────
-
-	[Fact]
-	public void BuildRdpContent_NeverEmitsAnyTuningKeys()
-	{
-		// 字体模糊排查收官：所有调优键（视觉档 + 无损效率档）全部不再写出，
-		// .rdp 回到 v1.0.x 的纯净形态，画质完全由 mstsc 默认值决定。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1600, h: 900));
-
-		Assert.DoesNotContain("session bpp", content);
-		Assert.DoesNotContain("connection type", content);
-		Assert.DoesNotContain("networkautodetect", content);
-		Assert.DoesNotContain("bandwidthautodetect", content);
-		Assert.DoesNotContain("allow desktop composition", content);
-		Assert.DoesNotContain("disable wallpaper", content);
-		Assert.DoesNotContain("compression", content);
-		Assert.DoesNotContain("allow font smoothing", content);
-		Assert.DoesNotContain("bitmapcachepersistenable", content);
-		Assert.DoesNotContain("audiomode", content);
-		Assert.DoesNotContain("redirectprinters", content);
-		Assert.DoesNotContain("redirectsmartcards", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_SharedChannels_AlwaysOn()
-	{
-		// 剪贴板与磁盘共享内置恒开（用户明确要求的功能，与画质无关，不随参数回退）。
-		string content = RdpLauncher.BuildRdpContent(Opt());
-
-		Assert.Contains("redirectclipboard:i:1", content);
-		Assert.Contains("drivestoredirect:s:*", content);
-	}
-
-	[Fact]
-	public void BuildRdpContent_NeverEmitsScalingOrWindowPlacementKeys()
-	{
-		// smart sizing（位图拉伸缩放）与 dynamic resolution 是 v1.1.0 引入的
-		// 画质相关键，随参数回退一并移除；窗口摆放交回 mstsc 默认行为。
-		string content = RdpLauncher.BuildRdpContent(Opt(w: 1280, h: 720));
-
-		Assert.DoesNotContain("smart sizing", content);
-		Assert.DoesNotContain("dynamic resolution", content);
-		Assert.DoesNotContain("winposstr", content);
-		Assert.Contains("screen mode id:i:1", content);
-		Assert.Contains("desktopwidth:i:1280", content);
 	}
 }

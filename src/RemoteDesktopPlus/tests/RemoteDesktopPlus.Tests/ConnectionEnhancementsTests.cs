@@ -148,6 +148,9 @@ public class ConnectionEnhancementsTests
 		using TempDb tmp = new TempDb();
 		var (vm, db, _) = Create(tmp);
 		vm.Resolution = "1920*1080";
+		vm.RedirectClipboard = true;
+		vm.RedirectLocalDrive = true;
+		vm.LocalDriveLetter = MainViewModel.AllDrivesDisplayName;
 
 		ConnectionItem item = Seed(db, vm, "10.0.0.1", group: "客户A");
 		// 组内没有任何覆盖 → 全部继承全局
@@ -155,6 +158,8 @@ public class ConnectionEnhancementsTests
 
 		Assert.Equal(1920, opt.Width);
 		Assert.Equal(1080, opt.Height);
+		Assert.True(opt.RedirectClipboard);
+		Assert.True(opt.RedirectLocalDrive);
 	}
 
 	[Fact]
@@ -163,17 +168,20 @@ public class ConnectionEnhancementsTests
 		using TempDb tmp = new TempDb();
 		var (vm, db, _) = Create(tmp);
 		vm.Resolution = "1920*1080";
+		vm.RedirectClipboard = true;
+		vm.RedirectLocalDrive = true;
+		vm.LocalDriveLetter = MainViewModel.AllDrivesDisplayName;
 
-		ConnectionItem item = Seed(db, vm, "10.0.0.2", group: "大屏组");
+		ConnectionItem item = Seed(db, vm, "10.0.0.2", group: "只读环境");
 
-		// 仅覆盖分辨率，其余继承（剪贴板/磁盘 v1.2.0 起内置恒开，不再支持覆盖）
+		// 仅覆盖剪贴板，其余继承
 		GroupOptionStore store = new GroupOptionStore(db);
-		store.Set("大屏组", new GroupOptions { Resolution = "2560*1440" });
+		store.Set("只读环境", new GroupOptions { RedirectClipboard = false });
 
 		RdpLauncher.RdpOptions opt = vm.BuildEffectiveOptions(item);
 
-		Assert.Equal(2560, opt.Width);   // 组覆盖生效
-		Assert.Equal(1440, opt.Height);
+		Assert.False(opt.RedirectClipboard);   // 组覆盖生效
+		Assert.Equal(1920, opt.Width);         // 分辨率仍继承全局
 	}
 
 	[Fact]
@@ -182,11 +190,11 @@ public class ConnectionEnhancementsTests
 		using TempDb tmp = new TempDb();
 		var (vm, db, _) = Create(tmp);
 		var store = new GroupOptionStore(db);
-		store.Set("TEST", new GroupOptions { Resolution = "1920*1080" });
+		store.Set("TEST", new GroupOptions { RedirectClipboard = false });
 
 		// "test" 与 "TEST" 必须命中同一条配置，否则会出现「改了 A 组但 B 组没变」
 		Assert.NotNull(store.Get("test"));
-		Assert.Equal("1920*1080", store.Get("test")!.Resolution);
+		Assert.False(store.Get("test")!.RedirectClipboard);
 	}
 
 	[Fact]
@@ -195,7 +203,7 @@ public class ConnectionEnhancementsTests
 		using TempDb tmp = new TempDb();
 		var (_, db, _) = Create(tmp);
 		var store = new GroupOptionStore(db);
-		store.Set("g", new GroupOptions { Resolution = "1920*1080" });
+		store.Set("g", new GroupOptions { RedirectClipboard = false });
 		Assert.NotEmpty(store.GroupNames());
 
 		// 清空所有字段应移除条目，避免留下空壳让人误以为配过
@@ -304,8 +312,8 @@ public class ConnectionEnhancementsTests
 		// 导出应反映「这台机器实际会怎么连」，故必须应用分组覆盖。
 		using TempDb tmp = new TempDb();
 		var (vm, db, dialogs) = Create(tmp);
-		ConnectionItem item = Seed(db, vm, "10.7.7.7", group: "大屏组");
-		new GroupOptionStore(db).Set("大屏组", new GroupOptions { Resolution = "2560*1440" });
+		ConnectionItem item = Seed(db, vm, "10.7.7.7", group: "无剪贴板组");
+		new GroupOptionStore(db).Set("无剪贴板组", new GroupOptions { RedirectClipboard = false });
 		vm.SelectedConnection = item;
 
 		string target = Path.Combine(Path.GetTempPath(), $"rdp-export-{Guid.NewGuid():N}.rdp");
@@ -315,10 +323,7 @@ public class ConnectionEnhancementsTests
 			vm.ExportSelectedRdpCommand.Execute(null);
 
 			string content = File.ReadAllText(target, System.Text.Encoding.Unicode);
-			Assert.Contains("desktopwidth:i:2560", content);
-			// 剪贴板/磁盘内置恒开，导出文件也必须带上
-			Assert.Contains("redirectclipboard:i:1", content);
-			Assert.Contains("drivestoredirect:s:*", content);
+			Assert.Contains("redirectclipboard:i:0", content);
 		}
 		finally
 		{
@@ -383,11 +388,11 @@ public class ConnectionEnhancementsTests
 		vm.SelectedGroupFilter = "只读组";
 
 		// 模拟面板保存：直接写 store（面板 UI 交互不在单测范围，这里验证 VM 侧生效链路）
-		new GroupOptionStore(db).Set("只读组", new GroupOptions { Resolution = "2560*1440" });
+		new GroupOptionStore(db).Set("只读组", new GroupOptions { RedirectClipboard = false });
 		dialogs.GroupOptionsAnswers.Enqueue(true);
 		vm.EditGroupOptionsCommand.Execute(null);
 
-		Assert.Equal(2560, vm.BuildEffectiveOptions(item).Width);
+		Assert.False(vm.BuildEffectiveOptions(item).RedirectClipboard);
 	}
 
 	[Fact]

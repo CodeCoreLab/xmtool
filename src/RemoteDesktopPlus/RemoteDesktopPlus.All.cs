@@ -332,17 +332,8 @@ public static class SettingKeys
 
 	public const string OptionResolution = "options.resolution";
 
-	/// <summary>
-	/// 历史键：盘符/剪贴板共享曾是界面开关（v1.2.0 起内置默认开启、界面不再提供），
-	/// 流畅优先档已整体回退。三个键在旧库里可能有残留值，读到即忽略，不再有写入路径。
-	/// </summary>
 	public const string OptionRedirectDrive = "options.redirect_drive";
 
-	public const string OptionPerformanceMode = "options.performance_mode";
-
-	/// <summary>
-	/// 历史键：盘符共享曾是「全部盘符 / 单个盘符」二选一，现固定为全部盘符。
-	/// </summary>
 	public const string OptionLocalDriveLetter = "options.local_drive_letter";
 
 	public const string OptionForceConsole = "options.force_console";
@@ -358,50 +349,6 @@ public static class SettingKeys
 
 	/// <summary>分组级配置覆盖表（JSON），见 <see cref="GroupOptionStore"/>。</summary>
 	public const string OptionGroupOverrides = "options.group_overrides";
-}
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// 追加区段：RemoteDesktopPlus.Services/AppVersion.cs  →  namespace RemoteDesktopPlus.Services
-// ════════════════════════════════════════════════════════════════════════
-namespace RemoteDesktopPlus.Services
-{
-using System;
-using System.Reflection;
-
-/// <summary>
-/// 应用版本的唯一来源：读 <c>Properties/AssemblyInfo.cs</c> 的
-/// <c>AssemblyInformationalVersion</c>。关于窗口与导出信息都从这里取，
-/// 不在 XAML 里硬编码 —— 否则两处版本号必然漂移。
-/// </summary>
-public static class AppVersion
-{
-	/// <summary>形如 <c>1.1.0</c>；读不到时返回 <c>0.0.0</c> 而不是抛异常。</summary>
-	public static string Current { get; } = Resolve();
-
-	private static string Resolve()
-	{
-		try
-		{
-			string? informational = Assembly.GetEntryAssembly()
-				?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
-				?.InformationalVersion;
-			if (!string.IsNullOrWhiteSpace(informational))
-			{
-			// 去掉 SourceLink 追加的 "+<commit>" 后缀，只留语义化版本。
-			int plus = informational.IndexOf('+');
-			return plus > 0 ? informational.Substring(0, plus) : informational;
-		}
-		// 回落：用 AssemblyVersion。刻意不读 FileVersionInfo(asm.Location) ——
-		// 单文件发布下 Assembly.Location 为空（IL3000），那条路径在真实产物里永远走不通。
-		Version? asmVersion = Assembly.GetEntryAssembly()?.GetName().Version;
-		return asmVersion == null ? "0.0.0" : $"{asmVersion.Major}.{asmVersion.Minor}.{asmVersion.Build}";
-		}
-		catch
-		{
-			return "0.0.0";
-		}
-	}
 }
 }
 
@@ -422,6 +369,7 @@ using System.Text;
 public static class Log
 {
 	private const int RetainDays = 30;
+
 	private static readonly object _gate = new object();
 
 	/// <summary>日志目录。独立属性便于测试清理与用户定位。</summary>
@@ -862,17 +810,13 @@ public sealed class GroupOptions
 	/// <summary>为空表示继承全局设置。</summary>
 	public string? Resolution { get; set; }
 
-	/// <summary>
-	/// 历史字段：盘符共享范围 / 剪贴板 / 磁盘 / 流畅优先的组覆盖均已移除
-	/// （v1.2.0：剪贴板与磁盘内置恒开、流畅档回退），属性保留只为旧 JSON
-	/// 反序列化不报未知字段，读取后一律忽略。
-	/// </summary>
+	/// <summary>为空表示继承全局设置。</summary>
 	public bool? RedirectClipboard { get; set; }
 
+	/// <summary>为空表示继承全局设置。</summary>
 	public bool? RedirectLocalDrive { get; set; }
 
-	public bool? PerformanceMode { get; set; }
-
+	/// <summary>为空表示继承全局；`*` 表示全部盘符。</summary>
 	public string? LocalDriveLetter { get; set; }
 }
 
@@ -937,7 +881,10 @@ public sealed class GroupOptionStore
 
 	private static bool IsAllInherited(GroupOptions o)
 	{
-		return o.Resolution == null;
+		return o.Resolution == null
+			&& o.RedirectClipboard == null
+			&& o.RedirectLocalDrive == null
+			&& o.LocalDriveLetter == null;
 	}
 
 	private Dictionary<string, GroupOptions> Load()
@@ -1601,7 +1548,16 @@ using System.Threading.Tasks;
 /// </summary>
 public static class RdpLauncher
 {
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool ForceConsole)
+	/// <param name="RedirectClipboard">
+	/// 是否启用剪贴板重定向（默认 true）。
+	/// 缺省为 true 是刻意的：本地与远程之间复制粘贴属于基本预期，
+	/// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理（不是按 UI 默认勾选）。
+	/// </param>
+	/// <param name="LocalDriveLetter">
+	/// 要重定向的盘符。传 <see cref="AllDrivesToken"/> 表示全部驱动器（含连接后接入的）；
+	/// 传单个字母（如 "D"）表示只重定向该盘。
+	/// </param>
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true)
 	{
 		/// <summary>
 		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
@@ -1609,6 +1565,32 @@ public static class RdpLauncher
 		/// 因为它同时覆盖已有盘与后插的 U 盘/移动硬盘。
 		/// </summary>
 		public const string AllDrivesToken = "*";
+
+		/// <summary>
+		/// 把盘符规范成 RDP 规范要求的 `D:\;` 形态。
+		/// 规范来源：drivestoredirect 的官方示例为 `C:\;E:\;` —— 每个盘符带尾随反斜杠，
+		/// 并以分号结尾。历史实现只写 `D:`，属于不完整语法（mstsc 可能宽松接受，
+		/// 但不符合规范，且多盘符时无法拼接）。
+		/// </summary>
+		public static string NormalizeDriveSpec(string? letter)
+		{
+			if (string.IsNullOrWhiteSpace(letter))
+			{
+				return string.Empty;
+			}
+			string trimmed = letter.Trim();
+			if (AllDrivesToken.Equals(trimmed, StringComparison.Ordinal))
+			{
+				return AllDrivesToken;
+			}
+			// 归一成单字母：接受 "D"、"D:"、"D:\" 三种输入
+			char drive = char.ToUpperInvariant(trimmed[0]);
+			if (drive < 'A' || drive > 'Z')
+			{
+				return string.Empty;
+			}
+			return $"{drive}:\\;";
+		}
 	}
 
 	private static IRdpBackend _backend = WindowsRdpBackend.Instance;
@@ -1714,13 +1696,23 @@ public static class RdpLauncher
 			sb.AppendLine("screen mode id:i:2");
 		}
 
-		// 剪贴板重定向写死开启：本地与远程互拷是运维基本预期，不再提供界面开关；
-		// 且 .rdp 中缺失 redirectclipboard 键时 mstsc 按「禁用」处理，必须显式 i:1。
-		sb.AppendLine("redirectclipboard:i:1");
+		// 剪贴板重定向：mstsc 对此键**显式关闭优先**，键缺失时按禁用处理，
+		// 故必须显式写出 i:1，不能依赖「未写就默认开」。
+		sb.AppendLine($"redirectclipboard:i:{(opt.RedirectClipboard ? 1 : 0)}");
 
-		// 驱动器重定向写死全部盘符（* 含连接之后接入的 U 盘），不再提供界面开关。
+		// 驱动器重定向三种取值（Microsoft RDP 属性规范）：
+		//   键缺失 / 值空 → 不重定向
+		//   *            → 全部驱动器，**含连接之后接入的**（动态，比逐个枚举更彻底）
+		//   C:\;E:\;     → 指定盘符（每个盘符带尾随反斜杠，分号分隔）
 		// 注意 * 后面**不能**再跟冒号，`s:*:` 是非法语法，会导致整段重定向失效。
-		sb.AppendLine($"drivestoredirect:s:{RdpOptions.AllDrivesToken}");
+		if (opt.RedirectLocalDrive)
+		{
+			string driveSpec = RdpOptions.NormalizeDriveSpec(opt.LocalDriveLetter);
+			if (!string.IsNullOrEmpty(driveSpec))
+			{
+				sb.AppendLine($"drivestoredirect:s:{driveSpec}");
+			}
+		}
 		if (opt.ForceConsole)
 		{
 			sb.AppendLine("connect to console:i:1");
@@ -1899,8 +1891,9 @@ public interface IDialogService
 	/// <param name="groupName">要配置的分组名（非空）。</param>
 	/// <param name="store">分组配置存储，面板直接通过它读写。</param>
 	/// <param name="resolutionOptions">分辨率候选。</param>
+	/// <param name="driveLetterOptions">盘符候选。</param>
 	/// <returns>用户是否点了保存。</returns>
-	bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions);
+	bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions);
 }
 }
 
@@ -2504,7 +2497,6 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Windows;
 using System.Windows.Data;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -2554,8 +2546,22 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private string resolution = "1920*1080";
 
+	/// <summary>
+	/// 盘符重定向开关。默认开启 —— 「本地与目标之间传文件」是这类工具的主要用途之一，
+	/// 默认关闭会让人先遇到「拷不了文件」再回来找开关。
+	/// </summary>
+	[ObservableProperty]
+	private bool redirectLocalDrive = true;
+
+	[ObservableProperty]
+	private string localDriveLetter = AllDrivesDisplayName;
+
 	[ObservableProperty]
 	private bool forceConsole;
+
+	/// <summary>剪贴板重定向开关，默认开启（见 RdpOptions.RedirectClipboard 的说明）。</summary>
+	[ObservableProperty]
+	private bool redirectClipboard = true;
 
 	[ObservableProperty]
 	private bool optionsExpanded = true;
@@ -2617,10 +2623,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 
 	public ObservableCollection<ConnectionItem> Connections { get; } = new ObservableCollection<ConnectionItem>();
 
-	/// <summary>
-	/// 分辨率候选。首项「最大化」让远程桌面窗口铺满工作区且不遮任务栏（见 <see cref="ParseResolution"/>），
-	/// 其余为固定像素档；「全屏」保留给需要远程机自行决定分辨率的场景。
-	/// </summary>
 	public IReadOnlyList<string> ResolutionOptions { get; } = new string[11] { "全屏", "1024*768", "1280*720", "1366*768", "1440*900", "1600*900", "1680*1050", "1920*1080", "1920*1200", "2560*1440", "3840*2160" };
 
 	/// <summary>「全部分组」在筛选下拉里的显示值。</summary>
@@ -2715,7 +2717,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			_dialogs.ShowMessage("请先在左上角下拉里选中一个具体分组，再修改它的设置。", "提示");
 			return;
 		}
-		bool saved = _dialogs.EditGroupOptions(group, _groupOptions, ResolutionOptions);
+		bool saved = _dialogs.EditGroupOptions(group, _groupOptions, ResolutionOptions, DriveLetters);
 		if (!saved)
 		{
 			return;
@@ -2729,6 +2731,65 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	{
 		string group = SelectedGroupFilter;
 		return !string.IsNullOrEmpty(group) && !AllGroupsDisplayName.Equals(group, StringComparison.Ordinal);
+	}
+
+	/// <summary>
+	/// 盘符下拉选项。第一项是「全部盘符」，映射到 RDP 的 `*` 取值；
+	/// 其余为本机实际就绪的盘符字母。
+	/// 全部盘符用 `*` 而非逐个枚举的理由：`*` 是动态的，连接之后新插入的 U 盘
+	/// 也会自动重定向，而枚举只在生成 .rdp 的瞬间有效。
+	/// </summary>
+	public IReadOnlyList<string> DriveLetters { get; } = BuildDriveLetterOptions();
+
+	private static IReadOnlyList<string> BuildDriveLetterOptions()
+	{
+		List<string> options = new List<string> { AllDrivesDisplayName };
+		options.AddRange(BuildDriveLetters());
+		return options;
+	}
+
+	/// <summary>下拉里显示「全部盘符」，与协议取值 `*` 解耦，避免把 `*` 直接暴露给用户。</summary>
+	public const string AllDrivesDisplayName = "全部盘符";
+
+	/// <summary>把下拉选项翻译成协议取值（UI 显示值 → RdpOptions 输入值）。</summary>
+	private static string ToDriveSpec(string? display)
+	{
+		return AllDrivesDisplayName.Equals(display, StringComparison.Ordinal)
+			? RdpLauncher.RdpOptions.AllDrivesToken
+			: (display ?? string.Empty);
+	}
+
+	private static IReadOnlyList<string> BuildDriveLetters()
+	{
+		try
+		{
+			List<string> list = (from s in (from d in DriveInfo.GetDrives()
+					where d.IsReady
+					select (d.Name.Length <= 0) ? string.Empty : d.Name[0].ToString().ToUpperInvariant()).Where(delegate(string s)
+				{
+					if (s.Length == 1)
+					{
+						char c2 = s[0];
+						if (c2 >= 'C')
+						{
+							return c2 <= 'Z';
+						}
+						return false;
+					}
+					return false;
+				}).Distinct()
+				orderby s
+				select s).ToList();
+			if (list.Count > 0)
+			{
+				return list;
+			}
+		}
+		catch
+		{
+		}
+		return (from c in Enumerable.Range(67, 24)
+			select ((char)c).ToString()).ToList();
 	}
 
 	/// <summary>
@@ -2763,12 +2824,24 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				Resolution = setting;
 			}
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionRedirectDrive), out var result))
+			{
+				RedirectLocalDrive = result;
+			}
+			string setting2 = _db.GetSetting(SettingKeys.OptionLocalDriveLetter);
+			if (!string.IsNullOrEmpty(setting2) && DriveLetters.Contains(setting2))
+			{
+				LocalDriveLetter = setting2;
+			}
 			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionForceConsole), out var result2))
 			{
 				ForceConsole = result2;
 			}
-			// OptionRedirectDrive / OptionPerformanceMode / OptionRedirectClipboard 为历史键：
-			// 三项已内置默认（剪贴板与磁盘恒开、流畅档回退），读到即忽略。
+			// 无历史设置时保持字段默认 true（首次运行也默认开启剪贴板）
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionRedirectClipboard), out var result3))
+			{
+				RedirectClipboard = result3;
+			}
 			SortByRecent = string.Equals(_db.GetSetting(SettingKeys.OptionSortMode), "recent", StringComparison.OrdinalIgnoreCase);
 		}
 		finally
@@ -2810,11 +2883,35 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 	}
 
+	partial void OnRedirectLocalDriveChanged(bool value)
+	{
+		if (!_suppressOptionSave)
+		{
+			_db.SetSetting(SettingKeys.OptionRedirectDrive, value.ToString());
+		}
+	}
+
+	partial void OnLocalDriveLetterChanged(string value)
+	{
+		if (!_suppressOptionSave)
+		{
+			_db.SetSetting(SettingKeys.OptionLocalDriveLetter, value ?? string.Empty);
+		}
+	}
+
 	partial void OnForceConsoleChanged(bool value)
 	{
 		if (!_suppressOptionSave)
 		{
 			_db.SetSetting(SettingKeys.OptionForceConsole, value.ToString());
+		}
+	}
+
+	partial void OnRedirectClipboardChanged(bool value)
+	{
+		if (!_suppressOptionSave)
+		{
+			_db.SetSetting(SettingKeys.OptionRedirectClipboard, value.ToString());
 		}
 	}
 
@@ -2920,6 +3017,9 @@ public partial class MainViewModel
 		GroupOptions? group = _groupOptions.Get(item.GroupName);
 
 		string resolution = group?.Resolution ?? Resolution;
+		bool redirectClipboard = group?.RedirectClipboard ?? RedirectClipboard;
+		bool redirectDrive = group?.RedirectLocalDrive ?? RedirectLocalDrive;
+		string driveSpec = group?.LocalDriveLetter ?? LocalDriveLetter;
 
 		var (width, height) = ParseResolution(resolution);
 		return new RdpLauncher.RdpOptions(
@@ -2929,7 +3029,10 @@ public partial class MainViewModel
 			_crypto.Decrypt(item.EncryptedPassword),
 			width,
 			height,
-			ForceConsole);
+			redirectDrive,
+			ToDriveSpec(driveSpec),
+			ForceConsole,
+			redirectClipboard);
 	}
 
 	public void ConnectItem(ConnectionItem item)
@@ -3164,50 +3267,23 @@ public partial class MainViewModel
 			_dialogs.ShowMessage("请填写主机 IP 地址。", "提示");
 			return;
 		}
-		// 先按表单内容解析出要用的记录（可能为 null = 首次连接这台主机），
-		// 有了分组才能算出实际生效的 RDP 选项。
-		ConnectionItem? existing = Connections.FirstOrDefault(c =>
-			string.Equals(c.Host, Host, StringComparison.OrdinalIgnoreCase)
-			&& c.Port == Port
-			&& string.Equals(c.UserName, UserName, StringComparison.OrdinalIgnoreCase));
-		RdpLauncher.RdpOptions options = existing != null
-			? BuildEffectiveOptions(existing)
-			: BuildFormOptions();
-
-		// 目标：连接成功一次即自动保存。但「发起」与「连上」之间隔着 mstsc 自己的
-		// 网络握手与凭据校验，本工具拿不到成功信号 —— 用 RDP 握手来判定会让每次点
-		// 连接都多等数秒。故以「启动器未抛异常」为成功判据：临时目录不可写、凭据
-		// 写入失败等本地失败不落库，避免把连不上的记录静默存进列表。
-		try
+		SaveOrUpdateForm();
+		// 表单连接同样要享受分组覆盖：先找到与表单主机/端口匹配的记录，
+		// 用它的分组；找不到（新表单）则按无分组处理，走全局设置。
+		ConnectionItem? matched = Connections.FirstOrDefault(c =>
+			string.Equals(c.Host, Host, StringComparison.OrdinalIgnoreCase) && c.Port == Port);
+		if (matched != null)
 		{
-			_launcher.Launch(options);
-		}
-		catch (Exception ex)
-		{
-			Log.Error("发起连接失败: " + Host + ":" + Port, ex);
-			_dialogs.ShowMessage("连接失败：" + ex.Message, "错误", DialogKind.Error);
+			_launcher.Launch(BuildEffectiveOptions(matched));
 			return;
 		}
-		SaveOrUpdateForm(allowSelectedOverride: false);
+		var (width, height) = ParseResolution(Resolution);
+		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
 	}
 
 	private bool CanConnect()
 	{
 		return !string.IsNullOrWhiteSpace(Host);
-	}
-
-	/// <summary>按表单当前值构造 RDP 选项（不查库，用于首次连接这台主机）。</summary>
-	private RdpLauncher.RdpOptions BuildFormOptions()
-	{
-		var (width, height) = ParseResolution(Resolution);
-		return new RdpLauncher.RdpOptions(
-			Host,
-			Port,
-			UserName,
-			Password,
-			width,
-			height,
-			ForceConsole);
 	}
 
 	[RelayCommand]
@@ -3219,32 +3295,17 @@ public partial class MainViewModel
 		}
 		else
 		{
-			SaveOrUpdateForm(allowSelectedOverride: true);
+			SaveOrUpdateForm();
 		}
 	}
 
 	/// <summary>
-	/// 把当前表单写回列表：命中已有项（Host/Port/UserName 三者全同）则更新，否则新增。
+	/// 把当前表单写回列表：命中已有项（选中项，或 Host/Port/UserName 三者全同）则更新，否则新增。
 	/// </summary>
-	/// <param name="allowSelectedOverride">
-	/// 是否允许用「当前选中项」作为命中目标。
-	/// <para>
-	/// 点「保存」时为 true：用户选中一行后改表单再保存，意图就是改那一行。
-	/// </para>
-	/// <para>
-	/// 点「连接」时为 false：连一台**另外的**主机时若仍以选中项为命中目标，
-	/// 会把用户刚连的那台覆盖成选中行的主机地址 —— 自动保存必须按主机身份匹配，
-	/// 否则「连一次就存一条」会变成「连一次就改坏一条」。
-	/// </para>
-	/// </param>
-	private void SaveOrUpdateForm(bool allowSelectedOverride)
+	private void SaveOrUpdateForm()
 	{
 		string encryptedPassword = _crypto.Encrypt(Password);
-		ConnectionItem? connectionItem = FindMatchingRow();
-		if (allowSelectedOverride && connectionItem == null)
-		{
-			connectionItem = SelectedConnection;
-		}
+		ConnectionItem connectionItem = SelectedConnection ?? Connections.FirstOrDefault((ConnectionItem c) => c.Host == Host && c.Port == Port && c.UserName == UserName);
 		if (connectionItem == null)
 		{
 			ConnectionItem connectionItem2 = new ConnectionItem
@@ -3269,22 +3330,6 @@ public partial class MainViewModel
 			_db.Update(connectionItem);
 			SelectedConnection = connectionItem;
 		}
-	}
-
-	/// <summary>
-	/// 按「主机 + 端口 + 账号」在现有列表里找唯一匹配行。
-	/// 三者齐全才认 —— 只按 Host/Port 匹配会让「同一台机器两个账号」互相覆盖。
-	/// </summary>
-	public ConnectionItem? FindMatchingRow()
-	{
-		if (string.IsNullOrWhiteSpace(Host))
-		{
-			return null;
-		}
-		return Connections.FirstOrDefault(c =>
-			string.Equals(c.Host, Host, StringComparison.OrdinalIgnoreCase)
-			&& c.Port == Port
-			&& string.Equals(c.UserName ?? string.Empty, UserName ?? string.Empty, StringComparison.OrdinalIgnoreCase));
 	}
 
 	[RelayCommand]
@@ -3533,7 +3578,6 @@ public partial class MainViewModel
 namespace RemoteDesktopPlus.Views
 {
 using System.Windows;
-using RemoteDesktopPlus.Services;
 
 /// <summary>
 /// 关于窗口。视图结构见 Views/AboutWindow.xaml。
@@ -3543,9 +3587,6 @@ public partial class AboutWindow : Window
 	public AboutWindow()
 	{
 		InitializeComponent();
-		// 版本号统一从程序集元数据读（Properties/AssemblyInfo.cs 的 InformationalVersion），
-		// 避免界面硬编码一处、程序集另一处，发版时漏改其中一处。
-		VersionText.Text = "v" + AppVersion.Current;
 	}
 
 	private void Ok_Click(object sender, RoutedEventArgs e)
@@ -3891,7 +3932,7 @@ public partial class GroupSettingsWindow : Window
 	/// <summary>保存后的结果，供调用方测试断言（Window 关闭后无法再读控件）。</summary>
 	public GroupOptions? Result { get; private set; }
 
-	public GroupSettingsWindow(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions)
+	public GroupSettingsWindow(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
 	{
 		_groupName = groupName ?? string.Empty;
 		_store = store ?? throw new ArgumentNullException(nameof(store));
@@ -3903,10 +3944,18 @@ public partial class GroupSettingsWindow : Window
 		{
 			ResolutionBox.Items.Add(r);
 		}
+		foreach (string d in driveLetterOptions)
+		{
+			DriveLetterBox.Items.Add(d);
+		}
 		// 兜底下拉至少有一项，避免空 ComboBox 让用户无从下手
 		if (ResolutionBox.Items.Count > 0)
 		{
 			ResolutionBox.SelectedIndex = 0;
+		}
+		if (DriveLetterBox.Items.Count > 0)
+		{
+			DriveLetterBox.SelectedIndex = 0;
 		}
 
 		LoadExisting();
@@ -3925,6 +3974,20 @@ public partial class GroupSettingsWindow : Window
 			OverrideResolution.IsChecked = true;
 			ResolutionBox.SelectedItem = opt.Resolution;
 		}
+		if (opt.RedirectClipboard != null)
+		{
+			OverrideClipboard.IsChecked = true;
+			ClipboardValue.IsChecked = opt.RedirectClipboard.Value;
+		}
+		if (opt.RedirectLocalDrive != null)
+		{
+			OverrideDrive.IsChecked = true;
+			DriveValue.IsChecked = opt.RedirectLocalDrive.Value;
+		}
+		if (opt.LocalDriveLetter != null)
+		{
+			DriveLetterBox.SelectedItem = opt.LocalDriveLetter;
+		}
 		UpdateEnabledState();
 	}
 
@@ -3936,12 +3999,23 @@ public partial class GroupSettingsWindow : Window
 
 	private void UpdateEnabledState()
 	{
-		ResolutionBox.IsEnabled = OverrideResolution.IsChecked == true;
+		bool res = OverrideResolution.IsChecked == true;
+		bool clip = OverrideClipboard.IsChecked == true;
+		bool drive = OverrideDrive.IsChecked == true;
+
+		ResolutionBox.IsEnabled = res;
+		ClipboardValue.IsEnabled = clip;
+		DriveValue.IsEnabled = drive;
+		DriveLetterBox.IsEnabled = drive;
 	}
 
 	private void ClearAll_Click(object sender, RoutedEventArgs e)
 	{
 		OverrideResolution.IsChecked = false;
+		OverrideClipboard.IsChecked = false;
+		OverrideDrive.IsChecked = false;
+		ClipboardValue.IsChecked = false;
+		DriveValue.IsChecked = false;
 		UpdateEnabledState();
 		MessageBox.Show("已清除全部覆盖项，保存后本组将完全继承全局设置。", "提示");
 	}
@@ -3958,6 +4032,19 @@ public partial class GroupSettingsWindow : Window
 		if (OverrideResolution.IsChecked == true && ResolutionBox.SelectedItem is string r)
 		{
 			opt.Resolution = r;
+		}
+		if (OverrideClipboard.IsChecked == true)
+		{
+			opt.RedirectClipboard = ClipboardValue.IsChecked == true;
+		}
+		if (OverrideDrive.IsChecked == true)
+		{
+			opt.RedirectLocalDrive = DriveValue.IsChecked == true;
+			// 盘符只在与「共享开启」同时存在时才有意义，否则写进去是无效配置。
+			if (opt.RedirectLocalDrive == true && DriveLetterBox.SelectedItem is string d)
+			{
+				opt.LocalDriveLetter = d;
+			}
 		}
 		// 全部字段为空时 Set 会移除该组条目，等价于「恢复全继承」。
 		_store.Set(_groupName, opt);
@@ -4144,14 +4231,11 @@ public partial class EditConnectionWindow : Window, INotifyPropertyChanged
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Views
 {
-using System;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;
 using System.Windows.Media;
 using RemoteDesktopPlus.Models;
 using RemoteDesktopPlus.ViewModels;
@@ -4182,166 +4266,11 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 
 	public event PropertyChangedEventHandler? PropertyChanged;
 
-	/// <summary>
-	/// 启动时确定的窗口尺寸（WPF 设备无关单位）。之后无论拖动、最大化、系统投递
-	/// 调整命令，宽高都以这两个值为准复位 —— 需求是窗口只平移不改尺寸。
-	/// 在 <see cref="Window.SourceInitialized"/> 时抓取，此时 InitializedComponent 已解析
-	/// XAML 的 Width/Height，且尚未被任何运行时改动污染。
-	/// </summary>
-	private double _lockedWidth;
-
-	private double _lockedHeight;
-
-	/// <summary>是否已锁定尺寸（抓取成功后置位，避免未初始化时误复位到 0）。</summary>
-	private bool _sizeLocked;
-
 	public MainWindow(MainViewModel viewModel)
 	{
 		InitializeComponent();
 		base.DataContext = viewModel;
-		base.SourceInitialized += OnSourceInitialized;
 		base.Loaded += OnLoaded;
-	}
-
-	/// <summary>
-	/// 窗口尺寸锁：四道防线，缺一都可能漏掉某个阶段。
-	/// <list type="number">
-	///   <item>XAML <c>ResizeMode=CanMinimize</c> + <c>ResizeBorderThickness=0</c> —— 从命中区上杜绝拖边缩放</item>
-	///   <item>本方法挂 <c>WM_GETMINMAXINFO</c> —— 把系统认为的 min/max 轨道尺寸钉死为当前尺寸</item>
-	///   <item><see cref="Window.StateChanged"/> —— 拦最大化/还原带来的尺寸变化</item>
-	///   <item><see cref="Window.SizeChanged"/> —— 兜底：尺寸一旦偏离就复位</item>
-	/// </list>
-	/// </summary>
-	private void OnSourceInitialized(object? sender, EventArgs e)
-	{
-		_lockedWidth = Width;
-		_lockedHeight = Height;
-		_sizeLocked = _lockedWidth > 0 && _lockedHeight > 0;
-
-		// 最大化同样会改尺寸，且会破坏「尺寸恒定」的观感，故一并禁用。
-		ResizeMode = ResizeMode.CanMinimize;
-
-		if (!_sizeLocked)
-		{
-			return;
-		}
-
-		// 消息层最严的一道：把系统计算的 min/max 轨道尺寸钉死为当前尺寸。
-		// 拖边缩放之所以会让窗口「越拖越小」，是因为系统在拖动中连续投递 WM_GETMINMAXINFO
-		// 并沿用上一次的轨道矩形；钉死 min=track=max 后窗口尺寸在拖动全过程不可变，
-		// 位置仍由系统正常处理 —— 恰好满足「只平移、不缩放」。
-		HwndSource? source = (HwndSource?)PresentationSource.FromVisual(this);
-		source?.AddHook(LockSizeWndProc);
-
-		// 尺寸偏离即复位。拖动窗口本身不改 Width/Height，故正常平移不会触发本分支；
-		// 真被外部改了（拖边、系统贴靠布局、DPI 变化）则立即还原。
-		base.SizeChanged += delegate(object? _, SizeChangedEventArgs args)
-		{
-			// 最小化时 WPF 会把尺寸压到 0，属于系统行为而非用户缩放，不干预。
-			if (args.NewSize.Width <= 0 || args.NewSize.Height <= 0)
-			{
-				return;
-			}
-			RestoreLockedSize();
-		};
-		base.StateChanged += delegate
-		{
-			// 最大化/还原会把尺寸换回 RestoreBounds，先退回 Normal 再复位。
-			if (WindowState == WindowState.Maximized)
-			{
-				WindowState = WindowState.Normal;
-				RestoreLockedSize();
-			}
-		};
-	}
-
-	/// <summary>
-	/// 把窗口尺寸复位到启动时锁定值。只在确实偏离时才写，避免无意义的重排。
-	/// </summary>
-	private void RestoreLockedSize()
-	{
-		if (!_sizeLocked || WindowState == WindowState.Minimized)
-		{
-			return;
-		}
-		if (Math.Abs(Width - _lockedWidth) > 0.5)
-		{
-			Width = _lockedWidth;
-		}
-		if (Math.Abs(Height - _lockedHeight) > 0.5)
-		{
-			Height = _lockedHeight;
-		}
-	}
-
-	/// <summary>
-	/// WM_GETMINMAXINFO 钩子：把最小/最大/轨道尺寸全部改写为锁定值。
-	/// <para>
-	/// 只处理最小与最大轨道（ptMinTrackSize / ptMaxTrackSize）即可 —— 这两个字段同时
-	/// 约束「拖边调整」与「最大化」，且不影响窗口位置（ptMaxPosition 保持默认）。
-	/// 用 Marshal 写结构体前先读原值，保留系统给出的大小写与字段布局。
-	/// </para>
-	/// </summary>
-	private const int WM_GETMINMAXINFO = 0x0024;
-
-	private IntPtr LockSizeWndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
-	{
-		if (msg != WM_GETMINMAXINFO || !_sizeLocked)
-		{
-			return IntPtr.Zero;
-		}
-		// 消息里的尺寸是物理像素，而 Width/Height 是设备无关单位，必须按当前 DPI 换算，
-		// 否则在 125%/150% 缩放下会锁到一个偏小的尺寸（正是「窗口变小」的观感来源）。
-		(double scaleX, double scaleY) = GetDpiScale();
-		MINMAXINFO info = Marshal.PtrToStructure<MINMAXINFO>(lParam);
-		int pxWidth = (int)Math.Round(_lockedWidth * scaleX);
-		int pxHeight = (int)Math.Round(_lockedHeight * scaleY);
-		info.ptMinTrackSize.X = pxWidth;
-		info.ptMinTrackSize.Y = pxHeight;
-		info.ptMaxTrackSize.X = pxWidth;
-		info.ptMaxTrackSize.Y = pxHeight;
-		Marshal.StructureToPtr(info, lParam, false);
-		// 不设 handled：让系统继续处理位置等其余字段。
-		return IntPtr.Zero;
-	}
-
-	/// <summary>
-	/// WM_GETMINMAXINFO 的 lParam 结构（Win32 <c>MINMAXINFO</c>）。
-	/// 字段顺序与布局必须与 user32 一致：5 个 POINT，全为 32 位有符号整数。
-	/// 只改写 ptMinTrackSize / ptMaxTrackSize 两个字段，其余原样保留。
-	/// </summary>
-	[StructLayout(LayoutKind.Sequential)]
-	private struct MINMAXINFO
-	{
-		public POINT ptReserved;
-		public POINT ptMaxSize;
-		public POINT ptMaxPosition;
-		public POINT ptMinTrackSize;
-		public POINT ptMaxTrackSize;
-	}
-
-	[StructLayout(LayoutKind.Sequential)]
-	private struct POINT
-	{
-		public int X;
-		public int Y;
-	}
-
-	/// <summary>当前窗口的 DPI 缩放比；读不到时按 1.0 处理。</summary>
-	private (double x, double y) GetDpiScale()
-	{
-		try
-		{
-			DpiScale dpi = VisualTreeHelper.GetDpi(this);
-			if (dpi.DpiScaleX > 0 && dpi.DpiScaleY > 0)
-			{
-				return (dpi.DpiScaleX, dpi.DpiScaleY);
-			}
-		}
-		catch
-		{
-		}
-		return (1.0, 1.0);
 	}
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
@@ -4361,39 +4290,7 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		mainViewModel.StartStatusPolling();
 		// 把 DataGrid 的默认视图交给 VM，用于按分组筛选（不改集合本身，保住拖拽排序）
 		mainViewModel.AttachConnectionsView(System.Windows.Data.CollectionViewSource.GetDefaultView(ConnList.ItemsSource));
-		// 布局量测：左栏是否需要纵向滚动。写日志便于验收「一屏放得下」。
-		// 除了 Loaded，还在每次改尺寸后重测 —— 验收要在各种窗口高度下都成立。
-		Dispatcher.BeginInvoke(new Action(LogFormScrollMetrics), System.Windows.Threading.DispatcherPriority.Loaded);
-		base.SizeChanged += delegate(object? _, SizeChangedEventArgs args)
-		{
-			if (args.NewSize.Width > 0 && args.NewSize.Height > 0)
-			{
-				Dispatcher.BeginInvoke(new Action(LogFormScrollMetrics), System.Windows.Threading.DispatcherPriority.Loaded);
-			}
-		};
 		base.Closed += (_, _) => mainViewModel.StopStatusPolling();
-	}
-
-	/// <summary>
-	/// 诊断用：记录左栏滚动容器的内容高度与视口高度。
-	/// 两者相等（或内容更小）即「一屏放得下、无需上下滑动」。
-	/// 用 Debug 级别：正常使用时不该污染 INFO 日志，只在需要排查布局时开。
-	/// </summary>
-	private void LogFormScrollMetrics()
-	{
-		try
-		{
-			Services.Log.Debug(string.Format(
-				"左栏布局: viewport={0:F0} extent={1:F0} 需纵向滚动={2} 横向={3}",
-				FormScroll.ViewportHeight,
-				FormScroll.ExtentHeight,
-				FormScroll.ExtentHeight > FormScroll.ViewportHeight + 1,
-				FormScroll.ExtentWidth > FormScroll.ViewportWidth + 1));
-		}
-		catch (Exception ex)
-		{
-			Services.Log.Warn("左栏布局量测失败", ex);
-		}
 	}
 
 	private void PwdBox_PasswordChanged(object sender, RoutedEventArgs e)
@@ -4531,9 +4428,9 @@ public sealed class WpfDialogService : IDialogService
 		return window.ShowDialog().GetValueOrDefault();
 	}
 
-	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions)
+	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
 	{
-		GroupSettingsWindow window = new GroupSettingsWindow(groupName, store, resolutionOptions);
+		GroupSettingsWindow window = new GroupSettingsWindow(groupName, store, resolutionOptions, driveLetterOptions);
 		window.Owner = OwnerOrNull();
 		return window.ShowDialog().GetValueOrDefault();
 	}

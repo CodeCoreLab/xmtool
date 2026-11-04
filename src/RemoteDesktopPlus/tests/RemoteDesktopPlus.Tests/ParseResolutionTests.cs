@@ -72,7 +72,7 @@ public class ParseResolutionTests
 		// 解析出 (null,null) 时必须落到 .rdp 的全屏分支，两者不能互相矛盾。
 		var (w, h) = MainViewModel.ParseResolution("全屏");
 		string content = RemoteDesktopPlus.Services.RdpLauncher.BuildRdpContent(
-			new RemoteDesktopPlus.Services.RdpLauncher.RdpOptions("h", 3389, "u", "p", w, h, false));
+			new RemoteDesktopPlus.Services.RdpLauncher.RdpOptions("h", 3389, "u", "p", w, h, false, "", false));
 		Assert.Contains("screen mode id:i:2", content);
 	}
 }
