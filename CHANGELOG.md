@@ -7,23 +7,6 @@
 
 ## [未发布]
 
-### 修复
-
-- **消除 `xUnit2013` 警告**：集合大小断言由 `Assert.Equal(1, Count)` 改为
-  `Assert.Single`
-
-### 变更
-
-- **依赖改用 NuGet `PackageReference`**：移除 2 个 `<Analyzer>` HintPath 与
-  6 个 `<Reference HintPath>`，改为 4 条 `PackageReference`
-  （CommunityToolkit.Mvvm 8.3.2 / gong-wpf-dragdrop 3.2.1 /
-  Microsoft.Data.Sqlite 8.0.10 / SQLitePCLRaw.bundle_e_sqlite3 2.1.6），
-  版本与原 vendored DLL 一致，行为不变
-- **移除仓库内 vendored 二进制**：删除 `libs/` 与 `analyzers/` 下 10 个 DLL，
-  并从 git 历史中一并清除。理由：vendored DLL 无法被 `dotnet restore` 更新、
-  无法审计来源，会让克隆后的仓库体积膨胀、CI 缓存失效
-- 测试工程移除 6 处 HintPath（`PackageReference` 依赖可传递）
-
 ## [2.0.0] - 2026-11-04
 
 ### 变更
@@ -33,12 +16,25 @@
   工程代号 `RemoteDesktopPlus` 与内部命名空间不变，产物更名 `枢联.exe`。
 - 关于窗口：更新命名诠释文案；技术栈标注 .NET 10 · WPF
 - 功能形态与 v1.0.5 一致（v1.1.0~v1.2.1 因画面模糊问题整体回退，见下）
+- **依赖改用 NuGet `PackageReference`**：移除 2 个 `<Analyzer>` HintPath 与
+  6 个 `<Reference HintPath>`，改为 4 条 `PackageReference`
+  （CommunityToolkit.Mvvm 8.4.2 / gong-wpf-dragdrop 3.2.1 /
+  Microsoft.Data.Sqlite 10.0.14 / SQLitePCLRaw.bundle_e_sqlite3 2.1.14），
+  版本与原 vendored DLL 一致，行为不变
+
+### 移除
+
+- **移除仓库内 vendored 二进制**：删除 `libs/` 与 `analyzers/` 下 10 个 DLL，
+  并从 git 历史中一并清除。理由：vendored DLL 无法被 `dotnet restore` 更新、
+  无法审计来源，会让克隆后的仓库体积膨胀、CI 缓存失效
+- 测试工程移除 6 处 HintPath（`PackageReference` 依赖可传递）
 
 ### 修复
 
 - 远程画面字体模糊排查收官：回退 v1.1.0 起的全部 .rdp 参数（流畅优先档、
   smart sizing、dynamic resolution、winposstr、效率键组），画质回归 mstsc 默认
-- 客户端全局 `Default.rdp` 低带宽体验档残留（allow font smoothing:0 等）已修正
+- **消除 `xUnit2013` 警告**：集合大小断言由 `Assert.Equal(1, Count)` 改为
+  `Assert.Single`
 
 ## [1.0.5] - 2026-10-23
 
