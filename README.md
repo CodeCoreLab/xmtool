@@ -77,11 +77,12 @@ xmtool/
 
 | 版本 | 大小 | 前提 |
 |---|---|---|
-| 精简版（框架依赖） | 2.5 MB | 需 .NET 8 Desktop Runtime |
-| 整合版（自包含） | 70 MB | 无（x64 Win10+） |
+| 精简版（框架依赖） `shulian-*-slim-win-x64.exe` | 2.9 MB | 需 .NET 10 Desktop Runtime |
+| 整合版（自包含） `shulian-*-full-win-x64.exe` | 73.4 MB | 无（x64 Win10+） |
 
-两个版本功能完全一致，只是分发方式不同：精简版需要系统已装 .NET 8 Desktop Runtime，
-整合版自带运行时、拷贝即用但体积大。
+两个版本功能完全一致，只是分发方式不同：精简版需要系统已装 .NET 10 Desktop Runtime，
+整合版自带运行时、拷贝即用但体积大。下载后重命名为 `枢联.exe` 即可使用
+（Release 资产名用拼音 `shulian`，规避 GitHub 上传链路对非 ASCII 文件名的截断）。
 
 > 历史版本归档在 Releases 页面的旧 tag 下。
 
