@@ -3,12 +3,13 @@
  * 判据：CSS 变量是否解析出实际颜色值（而非空），关键区块背景色是否非纯白。
  */
 const { chromium } = require('playwright');
+const { resolveChromePath } = require('./chrome_path');
 
 const URL = 'http://localhost:8080/';
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: resolveChromePath(),   // A42：不再硬编码本机 Chrome 路径
     args: ['--no-proxy-server', '--proxy-bypass-list=<-loopback>;127.0.0.1;10.*'],
     ignoreDefaultArgs: ['--proxy-server'],
   });

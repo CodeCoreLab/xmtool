@@ -9,11 +9,14 @@ import json
 import os
 import sys
 from datetime import datetime
+from pathlib import Path
 
 QUEUE_DIR = os.path.join(
     os.path.expanduser("~"), ".workbuddy", "scripts", ".state", "local_queue"
 )
-HTML_PATH = r"E:\xmtool\xmtool\docs\小马桌面工具-产品页.html"
+# A42：相对脚本自身位置定位仓库资源（旧实现写死 r"E:\xmtool\xmtool\docs\..."）。
+REPO_ROOT = Path(__file__).resolve().parent.parent
+HTML_PATH = str(REPO_ROOT / "docs" / "小马桌面工具-产品页.html")
 
 TITLE = "XMTool-小马桌面工具产品页 2026-10-20"
 PERIOD = "20261020"

@@ -12,9 +12,16 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
 
-EXE = r'E:\xmtool\xmtool\releases\v1.0.0-20261020\小马远程桌面-v1.0.0-fdd-2.5MB.exe'
-OUT_DIR = r'E:\xmtool\xmtool\docs\screenshots'
+# A42：相对脚本自身位置定位仓库资源（旧实现写死 r'E:\xmtool\xmtool\...'）。
+# 可用环境变量 XMTOOL_RELEASE_EXE 覆盖目标 exe（不同版本号的发布包名会变）。
+REPO_ROOT = Path(__file__).resolve().parent.parent
+EXE = os.environ.get(
+    'XMTOOL_RELEASE_EXE',
+    str(REPO_ROOT / 'releases' / 'v1.0.0-20261020' / '小马远程桌面-v1.0.0-fdd-2.5MB.exe'),
+)
+OUT_DIR = os.environ.get('XMTOOL_SHOTS_DIR', str(REPO_ROOT / 'docs' / 'screenshots'))
 NAME = 'app-main.png'
 
 user32 = ctypes.windll.user32

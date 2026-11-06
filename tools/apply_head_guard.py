@@ -30,8 +30,14 @@ GUARD = """<!--
 -->"""
 
 TARGETS = [
-    '/opt/aireport/web/aireport/index.html',
-    '/opt/aireport/web/aireport/product/index.html',
+    os.path.join(
+        os.environ.get('AIREPORT_WEB', '/opt/aireport/web/aireport'),
+        'index.html',
+    ),
+    os.path.join(
+        os.environ.get('AIREPORT_WEB', '/opt/aireport/web/aireport'),
+        'product', 'index.html',
+    ),
 ]
 
 MARK = '改这里的资源引用前必读'

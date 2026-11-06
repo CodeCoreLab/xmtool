@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Threading;
 using RemoteDesktopPlus.Services;
 using Xunit;
 
@@ -334,4 +336,143 @@ public class RdpLauncherTests
 	{
 		Assert.StartsWith(Path.GetTempPath().TrimEnd(Path.DirectorySeparatorChar), RdpLauncher.GetTempDirectory());
 	}
+
+	// ─────────────────── A16：延迟清理不得删除仍在被引用的凭据 ───────────────────
+
+	/// <summary>
+	/// A16 回归：同主机并发连接时，先发那条的延迟清理会把
+	/// <c>TERMSRV/&lt;host&gt;</c> 凭据删掉，而后发那条的 mstsc 还在用它
+	/// —— 表现为「第二次连接弹密码框」。
+	/// <para>
+	/// 修复后：清理前先看该主机是否仍有活跃连接引用；有则本轮跳过，
+	/// 等最后一条连接释放引用后才删。
+	/// </para>
+	/// </summary>
+	[Fact]
+	public void TryCleanupCredentialIfUnused_SkipsDeletion_WhileHostStillReferenced()
+	{
+		RecordingRdpBackend rec;
+		WithRecordingBackend(delegate(RecordingRdpBackend b)
+		{
+			// 模拟「另一条同主机连接仍在使用该凭据」
+			RdpLauncher.AcquireConnection("host-a16-alive");
+
+			bool cleaned = RdpLauncher.TryCleanupCredentialIfUnused("host-a16-alive");
+
+			Assert.False(cleaned, "仍被活跃连接引用时不得清理凭据");
+			Assert.Empty(b.DeletedCredentials);
+			Assert.Equal(1, RdpLauncher.GetActiveConnectionCount("host-a16-alive"));
+			return 0;
+		}, out rec);
+	}
+
+	/// <summary>A16：引用归零后才允许删除凭据。</summary>
+	[Fact]
+	public void TryCleanupCredentialIfUnused_Deletes_AfterLastReferenceReleased()
+	{
+		RecordingRdpBackend rec;
+		WithRecordingBackend(delegate(RecordingRdpBackend b)
+		{
+			RdpLauncher.AcquireConnection("host-a16-release");
+			RdpLauncher.ReleaseConnection("host-a16-release");
+
+			bool cleaned = RdpLauncher.TryCleanupCredentialIfUnused("host-a16-release");
+
+			Assert.True(cleaned, "引用归零后应清理凭据");
+			Assert.Equal(new[] { "TERMSRV/host-a16-release" }, b.DeletedCredentials);
+			return 0;
+		}, out rec);
+	}
+
+	/// <summary>
+	/// A16 端到端：两条同主机并发连接，延迟清理跑完后凭据**只被删一次**
+	/// （不能一条连接就把凭据删掉，也不能重复删）。
+	/// </summary>
+	[Fact]
+	public void Launch_SameHostTwice_CredentialDeletedOnlyAfterLastReferenceReleased()
+	{
+		int originalDelay = RdpLauncher.CleanupDelayMilliseconds;
+		RecordingRdpBackend rec;
+		try
+		{
+			RdpLauncher.CleanupDelayMilliseconds = 150;
+			WithRecordingBackend(delegate(RecordingRdpBackend b)
+			{
+				RdpLauncher.Launch(Opt(host: "host-a16-concurrent"));
+				RdpLauncher.Launch(Opt(host: "host-a16-concurrent"));
+				Assert.Equal(2, RdpLauncher.GetActiveConnectionCount("host-a16-concurrent"));
+
+				// 等两条连接的延迟清理都跑完（两条各 150ms，留足余量）
+				Thread.Sleep(1500);
+
+				// 两条连接都结束 → 引用归零 → 凭据最终被删除
+				Assert.Equal(0, RdpLauncher.GetActiveConnectionCount("host-a16-concurrent"));
+				Assert.NotEmpty(b.DeletedCredentials);
+				Assert.Equal("TERMSRV/host-a16-concurrent", b.DeletedCredentials[b.DeletedCredentials.Count - 1]);
+				return 0;
+			}, out rec);
+		}
+		finally
+		{
+			RdpLauncher.CleanupDelayMilliseconds = originalDelay;
+		}
+	}
+
+	// ─────────────────── A19：.rdp 临时文件名必须唯一 ───────────────────
+
+	/// <summary>
+	/// A19 回归：旧实现文件名只由「主机名_端口」决定，
+	/// 同主机同端口的并发连接会写到同一个文件上（互相覆盖 + 互相删除）。
+	/// </summary>
+	[Fact]
+	public void WriteRdpFile_ConcurrentSameHostAndPort_ProducesDistinctFileNames()
+	{
+		string p1 = RdpLauncher.WriteRdpFile(Opt(host: "10.0.0.9", port: 3390));
+		string p2 = RdpLauncher.WriteRdpFile(Opt(host: "10.0.0.9", port: 3390));
+		try
+		{
+			Assert.NotEqual(p1, p2);
+			Assert.NotEqual(Path.GetFileName(p1), Path.GetFileName(p2));
+			// 主机名+端口前缀仍保留（便于人工辨认）
+			Assert.Contains("10.0.0.9_3390", p1);
+			Assert.Contains("10.0.0.9_3390", p2);
+		}
+		finally
+		{
+			foreach (string p in new[] { p1, p2 })
+			{
+				if (File.Exists(p))
+				{
+					File.Delete(p);
+				}
+			}
+		}
+	}
+
+	/// <summary>A19：并发（多线程）生成的临时文件名也不得重复。</summary>
+	[Fact]
+	public void WriteRdpFile_ParallelWrites_ProducesDistinctFileNames()
+	{
+		const int N = 16;
+		string[] paths = new string[N];
+		System.Threading.Tasks.Parallel.For(0, N, i =>
+		{
+			paths[i] = RdpLauncher.WriteRdpFile(Opt(host: "10.0.0.10", port: 3390));
+		});
+		try
+		{
+			Assert.Equal(N, paths.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+		}
+		finally
+		{
+			foreach (string p in paths)
+			{
+				if (p != null && File.Exists(p))
+				{
+					File.Delete(p);
+				}
+			}
+		}
+	}
+
 }

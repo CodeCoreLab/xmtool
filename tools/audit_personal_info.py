@@ -17,8 +17,11 @@
 import os
 import re
 import sys
+from pathlib import Path
 
-ROOT = r'E:\xmtool\xmtool'
+# A42：仓库根相对脚本自身位置解析（旧实现写死 r'E:\xmtool\xmtool'，换机即失效）。
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ROOT = str(REPO_ROOT)
 # 排除：构建产物、备份、git 内部、二进制库、截图
 EXCLUDE_DIRS = {'bin', 'obj', '.git', 'backup', '_verify-screenshots', 'screenshots', 'data', 'logs'}
 EXCLUDE_EXT = {'.dll', '.pdb', '.ico', '.png', '.jpg', '.jpeg', '.gif', '.exe', '.zip', '.bak', '.db',

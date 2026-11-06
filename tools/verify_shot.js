@@ -9,6 +9,7 @@
  */
 const { chromium } = require('playwright');
 const path = require('path');
+const { resolveChromePath } = require('./chrome_path');
 
 const ONLINE = 'http://localhost:8080/';
 const LOCAL = 'file:///' + path.resolve(__dirname, '..', 'docs', '小马桌面工具-产品页.html').replace(/\\/g, '/');
@@ -18,7 +19,7 @@ const chk = (n, ok, ex) => { ok ? (pass++, console.log(`  ✅ ${n}${ex ? ' — '
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: resolveChromePath(),   // A42：不再硬编码本机 Chrome 路径
     args: ['--no-proxy-server', '--proxy-bypass-list=<-loopback>;127.0.0.1;10.*'],
     ignoreDefaultArgs: ['--proxy-server'],
   });

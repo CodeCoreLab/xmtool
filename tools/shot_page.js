@@ -1,11 +1,12 @@
 const { chromium } = require('playwright');
 const path = require('path');
+const { resolveChromePath } = require('./chrome_path');
 const FILE = 'file:///' + path.resolve(__dirname, '..', 'docs', '小马桌面工具-产品页.html').replace(/\\/g, '/');
 const OUT = path.resolve(__dirname, '..', 'docs', '_verify-screenshots') + path.sep;
 
 (async () => {
   const browser = await chromium.launch({
-    executablePath: 'C:/Program Files/Google/Chrome/Application/chrome.exe',
+    executablePath: resolveChromePath(),   // A42：不再硬编码本机 Chrome 路径
     args: ['--no-proxy-server', '--proxy-bypass-list=<-loopback>;127.0.0.1;10.*'],
     ignoreDefaultArgs: ['--proxy-server'],
   });

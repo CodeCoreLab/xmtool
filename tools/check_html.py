@@ -2,8 +2,11 @@
 """HTML 结构完整性检查：--i 形态、标签配对、动效类分布。"""
 import io
 import re
+from pathlib import Path
 
-P = r'E:\xmtool\xmtool\docs\小马桌面工具-产品页.html'
+# A42：相对脚本自身位置定位仓库资源（旧实现写死 r'E:\xmtool\xmtool\docs\...'）。
+REPO_ROOT = Path(__file__).resolve().parent.parent
+P = str(REPO_ROOT / 'docs' / '小马桌面工具-产品页.html')
 s = io.open(P, encoding='utf-8').read()
 
 ok = re.findall(r'--i:\d+"', s)

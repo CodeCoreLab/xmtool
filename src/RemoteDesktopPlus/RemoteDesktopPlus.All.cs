@@ -372,6 +372,9 @@ public static class Log
 
 	private static readonly object _gate = new object();
 
+	/// <summary>CleanupOldLogs 重入标记：避免日志写入与清理相互递归。</summary>
+	private static bool _inCleanup;
+
 	/// <summary>日志目录。独立属性便于测试清理与用户定位。</summary>
 	public static string LogDirectory { get; } = Path.Combine(
 		Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -410,26 +413,56 @@ public static class Log
 		}
 	}
 
+	/// <summary>
+	/// 清理超过保留期的旧日志。逐文件独立处理：单个文件出问题不能中断整轮清理。
+	/// </summary>
 	private static void CleanupOldLogs()
 	{
+		// 重入保护：Log.Write 内部会调用本方法，失败路径又要写日志，
+		// 不加保护会形成 Write → CleanupOldLogs → Write 的无限递归。
+		if (_inCleanup)
+		{
+			return;
+		}
+		_inCleanup = true;
 		try
 		{
 			DateTime cutoff = DateTime.Today.AddDays(-RetainDays);
 			foreach (string file in Directory.EnumerateFiles(LogDirectory, "log-*.log"))
 			{
-				string name = Path.GetFileNameWithoutExtension(file); // log-YYYYMMDD
-				if (name.Length == 12
-					&& DateTime.TryParseExact(name.AsSpan(5, 8), "yyyyMMdd", null,
-						System.Globalization.DateTimeStyles.None, out DateTime date)
-					&& date < cutoff)
+				try
 				{
-					File.Delete(file);
+					string name = Path.GetFileNameWithoutExtension(file); // log-YYYYMMDD
+					// 文件名形如 "log-20261106"：前缀 "log-" 占 4 字符，
+					// 日期从下标 4 开始、占 8 字符。原实现写的是 AsSpan(5, 8)，
+					// 而 5 + 8 = 13 > 长度 12 → AsSpan 抛 ArgumentOutOfRangeException，
+					// 异常又发生在 && 左侧（TryParseExact 尚未执行），
+					// 直接中断整个 foreach，导致所有旧日志都清不掉。
+					if (name.Length == 12
+						&& DateTime.TryParseExact(name.AsSpan(4, 8), "yyyyMMdd", null,
+							System.Globalization.DateTimeStyles.None, out DateTime date)
+						&& date < cutoff)
+					{
+						File.Delete(file);
+					}
+				}
+				catch (Exception ex)
+				{
+					// 单个文件失败只跳过该文件，不影响其余文件。
+					// 记到日志时不能走 Log.Write（会再次触发本方法），
+					// 因此直接忽略异常详情，保证清理逻辑可继续。
+					Log.Warn("清理单个旧日志失败: " + file + " (" + ex.Message + ")");
 				}
 			}
 		}
-		catch
+		catch (Exception ex)
 		{
-			// 清理失败静默，下次再试。
+			// 目录枚举本身失败（如目录不可访问）：下次再试。
+			Log.Warn("清理旧日志失败: " + ex.Message);
+		}
+		finally
+		{
+			_inCleanup = false;
 		}
 	}
 }
@@ -986,18 +1019,29 @@ public sealed class CryptoService
 		{
 			return false;
 		}
-		byte[] salt = Convert.FromBase64String(saltB64);
-		byte[] key = DeriveKey(masterPassword, salt);
 		try
 		{
+			// Base64 解码必须在 try 内：salt 被写坏时 Convert.FromBase64String
+			// 抛 FormatException，放在 try 外会一路冒泡到调用方
+			// （MasterPasswordWindow 的按钮事件没有 catch）→ WPF 未处理异常 → 应用崩溃。
+			byte[] salt = Convert.FromBase64String(saltB64);
+			byte[] key = DeriveKey(masterPassword, salt);
 			if (AesGcmDecrypt(verifier, key) == "OK")
 			{
 				_masterKey = key;
 				return true;
 			}
 		}
-		catch
+		catch (FormatException ex)
 		{
+			// 本地数据已损坏（salt 不是合法 Base64），不是用户密码输错。
+			Log.Warn("主密码 salt 解析失败，本地数据可能已损坏", ex);
+			return false;
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("主密码解锁失败", ex);
+			return false;
 		}
 		return false;
 	}
@@ -1535,6 +1579,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 
 /// <summary>
@@ -1608,6 +1653,92 @@ public static class RdpLauncher
 		}
 	}
 
+	/// <summary>
+	/// A16：按主机统计**活跃连接引用数**。
+	/// <para>
+	/// 缺陷背景：延迟清理线程无条件删除 <c>TERMSRV/&lt;host&gt;</c> 凭据，
+	/// 但同一主机的并发连接会共用同一个 target —— 先发的那条连接的清理
+	/// 会把后发连接正在使用的凭据删掉，导致后者的 mstsc 弹密码框。
+	/// </para>
+	/// <para>
+	/// 修复：Launch 时对主机 <c>+1</c>，延迟清理时对主机 <c>-1</c>；
+	/// 只有引用数归零的那一轮才真正删除凭据，仍被引用的主机本轮跳过，
+	/// 下一轮（引用归零时）再删。
+	/// </para>
+	/// </summary>
+	private static readonly Dictionary<string, int> ActiveConnections = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+	private static readonly object ActiveConnectionsLock = new object();
+
+	/// <summary>当前某主机的活跃连接引用数（测试与诊断可读）。</summary>
+	public static int GetActiveConnectionCount(string host)
+	{
+		lock (ActiveConnectionsLock)
+		{
+			return ActiveConnections.TryGetValue(host, out int n) ? n : 0;
+		}
+	}
+
+	/// <summary>登记一次对某主机的活跃连接引用（引用 +1）。</summary>
+	public static void AcquireConnection(string host)
+	{
+		lock (ActiveConnectionsLock)
+		{
+			ActiveConnections.TryGetValue(host, out int n);
+			ActiveConnections[host] = n + 1;
+		}
+	}
+
+	/// <summary>
+	/// 释放一次对某主机的活跃连接引用（引用 -1）。
+	/// <para>返回值：该主机是否已无其它活跃连接引用（即凭据可以安全删除）。</para>
+	/// </summary>
+	public static bool ReleaseConnection(string host)
+	{
+		lock (ActiveConnectionsLock)
+		{
+			if (!ActiveConnections.TryGetValue(host, out int n))
+			{
+				return true;
+			}
+			n -= 1;
+			if (n <= 0)
+			{
+				ActiveConnections.Remove(host);
+				return true;
+			}
+			ActiveConnections[host] = n;
+			return false;
+		}
+	}
+
+	/// <summary>
+	/// 尝试清理某主机的系统凭据。
+	/// <para>
+	/// 仅当该主机**已无活跃连接引用**时才删除；仍有引用则本轮跳过
+	/// （由最后一条连接释放引用后的一轮删除）。
+	/// </para>
+	/// <para>返回值：true = 已删除；false = 仍被引用，本轮跳过。</para>
+	/// </summary>
+	public static bool TryCleanupCredentialIfUnused(string host)
+	{
+		if (GetActiveConnectionCount(host) > 0)
+		{
+			return false;
+		}
+		TryDeleteCredential(host);
+		return true;
+	}
+
+	/// <summary>
+	/// 延迟清理的等待时长（毫秒）。
+	/// <para>
+	/// 生产值 5000：mstsc 读取 .rdp 与凭据是异步的，需要给它一点时间。
+	/// 暴露为可写是为了让单元测试不必真的等 5 秒。
+	/// </para>
+	/// </summary>
+	public static int CleanupDelayMilliseconds { get; set; } = 5000;
+
 	public static void Launch(RdpOptions opt)
 	{
 		string target = WindowsRdpBackend.BuildTarget(opt.Host);
@@ -1618,6 +1749,9 @@ public static class RdpLauncher
 			Log.Error("RDP 凭据写入失败，mstsc 将改为交互式询问密码: " + target);
 		}
 
+		// A16：本条连接开始引用该主机的凭据。
+		AcquireConnection(opt.Host);
+
 		string rdpPath = WriteRdpFile(opt);
 		_backend.StartClient(rdpPath);
 
@@ -1626,11 +1760,15 @@ public static class RdpLauncher
 		{
 			try
 			{
-				await Task.Delay(5000).ConfigureAwait(continueOnCapturedContext: false);
+				await Task.Delay(CleanupDelayMilliseconds).ConfigureAwait(continueOnCapturedContext: false);
 				TryDelete(rdpPath);
-				if (hasCredential)
+				// A16：本条连接对凭据的引用到此结束。
+				ReleaseConnection(opt.Host);
+				// 仅当该主机已无其它活跃连接引用时才删除凭据；
+				// 否则本轮跳过（不删），由最后一条连接释放引用时的那一轮删除。
+				if (!TryCleanupCredentialIfUnused(opt.Host))
 				{
-					TryDeleteCredential(opt.Host);
+					Log.Info("RDP 凭据仍被同主机其他活跃连接引用，本轮不清理: " + opt.Host);
 				}
 			}
 			catch (Exception ex)
@@ -1749,15 +1887,39 @@ public static class RdpLauncher
 		return sb.ToString();
 	}
 
-	/// <summary>生成并落盘 .rdp 文件（UTF-16LE），返回绝对路径。</summary>
+	/// <summary>
+	/// 生成并落盘 .rdp 文件（UTF-16LE），返回绝对路径。
+	/// <para>
+	/// A19：文件名必须含唯一成分。旧实现只用「主机名_端口」，
+	/// 同一主机同一端口的并发连接会写到**同一个文件**上：
+	/// 后发的覆盖先发的（内容不同 → 先发那条拿到的是后发的配置），
+	/// 且先发那条的延迟清理会把后发的 .rdp 删掉 → 后发的 mstsc 读不到文件。
+	/// </para>
+	/// <para>
+	/// 现在文件名形如 <c>host_port_&lt;pid&gt;_&lt;序号&gt;_&lt;随机&gt;.rdp</c>：
+	/// PID 区分进程、序号区分同进程内的多次生成、随机后缀兜底跨进程同 PID 复用。
+	/// 主机名+端口前缀保留（前缀仍可用于人工辨认是哪台机器）。
+	/// </para>
+	/// </summary>
 	public static string WriteRdpFile(RdpOptions opt)
 	{
 		string dir = GetTempDirectory();
 		Directory.CreateDirectory(dir);
 		string safeHost = string.Join("_", opt.Host.Split(Path.GetInvalidFileNameChars()));
-		string path = Path.Combine(dir, $"{safeHost}_{opt.Port}.rdp");
+		string path = Path.Combine(dir, $"{safeHost}_{opt.Port}_{BuildUniqueSuffix()}");
 		File.WriteAllText(path, BuildRdpContent(opt), Encoding.Unicode);
 		return path;
+	}
+
+	/// <summary>进程内单调递增的临时文件序号（配合 PID + 随机后缀保证唯一）。</summary>
+	private static int _tempFileSeq;
+
+	/// <summary>构造 .rdp 临时文件的唯一后缀（PID + 序号 + 随机十六进制）。</summary>
+	private static string BuildUniqueSuffix()
+	{
+		int seq = Interlocked.Increment(ref _tempFileSeq);
+		string rand = Guid.NewGuid().ToString("N").Substring(0, 8);
+		return $"{Environment.ProcessId}_{seq}_{rand}.rdp";
 	}
 
 	private static void TryDelete(string path)
@@ -3323,10 +3485,24 @@ public partial class MainViewModel
 		}
 		else
 		{
+			// 护栏：密码为空时**不覆盖**已有的真实密文。
+			// 空密码可能来自「解密失败」（主密码未解锁 / 密文损坏）而非用户真的想清空密码，
+			// 直接写空串会造成不可逆的数据丢失（同文件 Decrypt 注释已警示此失败模式）。
+			// 用户真要清空密码走「删除连接」，不走保存。
+			if (string.IsNullOrEmpty(encryptedPassword) && !string.IsNullOrEmpty(connectionItem.EncryptedPassword))
+			{
+				Log.Error("密码为空但目标连接已有密文，保留原密码不覆盖: " + connectionItem.Host);
+				// 本区段未 using System.Windows，用全限定名避免歧义。
+				System.Windows.MessageBox.Show("当前密码无法解密（主密码未解锁或密文已损坏），已保留原密码未做修改。\n\n"
+					+ "如需清空密码，请删除该连接后重新添加。");
+			}
+			else
+			{
+				connectionItem.EncryptedPassword = encryptedPassword;
+			}
 			connectionItem.Host = Host;
 			connectionItem.Port = Port;
 			connectionItem.UserName = UserName;
-			connectionItem.EncryptedPassword = encryptedPassword;
 			_db.Update(connectionItem);
 			SelectedConnection = connectionItem;
 		}
@@ -4886,7 +5062,16 @@ public partial class App : Application
 		}
 		if (crypto.IsMasterPasswordConfigured() && !crypto.HasMasterKey)
 		{
-			dialogs.ShowMasterPassword(MasterPasswordPurpose.Unlock);
+			// 必须检查返回值：用户在解锁对话框点「取消」时返回 false，
+			// 此时 _masterKey 仍为 null。后续「连接/保存」路径会用
+			// CryptoService.Encrypt(空串) 得到空串，把库里已有的真实密文覆盖掉，
+			// 且不可逆（同文件 Decrypt 的注释已警示过这一失败模式）。
+			// 与上方 LoginWindow 的处理保持一致：解锁失败即退出，不进入主流程。
+			if (!dialogs.ShowMasterPassword(MasterPasswordPurpose.Unlock))
+			{
+				Shutdown();
+				return;
+			}
 		}
 
 		// 上次导入回滚失败的哨兵文件：必须让用户知道数据可能不一致。

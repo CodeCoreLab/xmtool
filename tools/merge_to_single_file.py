@@ -7,11 +7,26 @@ Mechanical transform per file:
 Partial class declarations across multiple blocks are legal C#.
 Assembly attributes (Properties/AssemblyInfo.cs) stay a separate file.
 """
+import os
 import re
+import sys
 from pathlib import Path
 
-ROOT = Path(r"E:\xmtool\xmtool\src\RemoteDesktopPlus")
+# A42：仓库路径必须相对**脚本自身位置**解析，不能硬编码本机绝对路径。
+# 旧实现写死 r"E:\xmtool\xmtool\..."，换一台机器/换一个 checkout 目录就直接崩。
+# tools/ 的上一级即仓库根。
+REPO_ROOT = Path(__file__).resolve().parent.parent
+ROOT = REPO_ROOT / "src" / "RemoteDesktopPlus"
 OUT = ROOT / "RemoteDesktopPlus.All.cs"
+
+# A42 验证用：dry-run 只解析并打印路径，不写文件（避免测试改动源码）。
+# 用法：XMTOOL_MERGE_DRYRUN=1 python tools/merge_to_single_file.py
+DRY_RUN = os.environ.get('XMTOOL_MERGE_DRYRUN') == '1'
+if DRY_RUN:
+    print('REPO_ROOT=%s' % REPO_ROOT)
+    print('ROOT=%s' % ROOT)
+    print('OUT=%s' % OUT)
+    sys.exit(0)
 
 FILES = [  # dependency order: Models -> Services -> ViewModels -> Views -> Converters -> App
     "RemoteDesktopPlus.Models/OnlineStatus.cs",

@@ -1,8 +1,14 @@
 # -*- coding: utf-8 -*-
 """强化 style.css 头部警示：把「依赖 tokens.css」写成不可忽略的警告块。"""
 import io
+import os
 
-P = '/opt/aireport/web/aireport/product/assets/style.css'
+# A42：目标路径改为环境变量可覆盖（与 check_static_style.sh 的 ${AIREPORT_WEB:-...} 同模式）。
+# 默认值仍是服务器上的部署路径，但换一个环境不必改代码。
+P = os.environ.get(
+    'AIREPORT_STYLE_CSS',
+    '/opt/aireport/web/aireport/product/assets/style.css',
+)
 
 OLD = """/* ============================================================
    Aireport 产品介绍页 v2 · 单文件 · 零外部依赖
