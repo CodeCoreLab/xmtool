@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -38,10 +39,11 @@ internal sealed class RecordingRdpBackend : IRdpBackend
 		DeletedCredentials.Add(target);
 	}
 
-	public void StartClient(string rdpFilePath)
+	public Process? StartClient(string rdpFilePath)
 	{
 		StartedClients.Add(rdpFilePath);
 		ProcessArguments.Add(rdpFilePath);
+		return null; // 替身不启动真实进程：MstscWindowManager.Track 对 null 无操作
 	}
 }
 

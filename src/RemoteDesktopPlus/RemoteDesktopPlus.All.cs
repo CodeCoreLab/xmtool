@@ -1465,7 +1465,7 @@ public static class CredentialStore
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Services
 {
-// (no usings)
+using System.Diagnostics;
 
 /// <summary>
 /// 与 RDP 客户端进程及其凭据存储交互的抽象层。
@@ -1481,8 +1481,8 @@ public interface IRdpBackend
 	/// <summary>从系统凭据存储删除指定 target 的凭据。</summary>
 	void DeleteCredential(string target);
 
-	/// <summary>以给定的 .rdp 文件启动远程桌面客户端。</summary>
-	void StartClient(string rdpFilePath);
+	/// <summary>以给定的 .rdp 文件启动远程桌面客户端，返回进程句柄供窗口管理跟踪（启动失败返回 null）。</summary>
+	Process? StartClient(string rdpFilePath);
 }
 }
 
@@ -1491,7 +1491,11 @@ public interface IRdpBackend
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Services
 {
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
 
 /// <summary>
 /// Windows 平台的 RDP 后端：凭据走 <see cref="CredentialStore"/>（CredWriteW），
@@ -1519,15 +1523,586 @@ public sealed class WindowsRdpBackend : IRdpBackend
 		CredentialStore.DeleteGeneric(target);
 	}
 
-	public void StartClient(string rdpFilePath)
+	public Process? StartClient(string rdpFilePath)
 	{
-		Process.Start(new ProcessStartInfo
+		return Process.Start(new ProcessStartInfo
 		{
 			FileName = "mstsc.exe",
 			UseShellExecute = true,
 			ArgumentList = { rdpFilePath }
 		});
 	}
+}
+
+/// <summary>
+/// mstsc 窗口管理器：连接建立后把窗口在所在显示器工作区居中、把外框尺寸钉死为
+/// 「.rdp 桌面分辨率 + 非客户区」（拖动只平移、宽高比与尺寸恒定，杜绝被自动缩放）、
+/// 并支持在远程窗口上右键粘贴（吞掉右键并注入 Shift+Insert）。
+/// <para>
+/// 只操作窗口层，不碰 .rdp 内容——v1.1.0~v1.2.1 改 .rdp 视频参数导致画面模糊整体回退的
+/// 教训：窗口行为与画面参数必须分层隔离。
+/// </para>
+/// <para>
+/// 生命周期：<see cref="Track"/> 由 UI 线程调用（Connect → Launch → Track）；钩子必须装在
+/// 带消息循环的线程上，装失败仅降级（不右键粘贴 / 靠轮询钉尺寸），不影响连接本身。
+/// </para>
+/// </summary>
+public static class MstscWindowManager
+{
+	// ── 纯逻辑（单测覆盖，不含 Win32）──────────────────────────────────
+
+	/// <summary>归一化 .rdp 桌面尺寸：宽高须同时为正，否则视为全屏（不锁尺寸不居中）。</summary>
+	public static (int? Width, int? Height) NormalizeDesktopSize(int? width, int? height)
+	{
+		bool ok = width.HasValue && width.Value > 0 && height.HasValue && height.Value > 0;
+		return ok ? (width, height) : (null, null);
+	}
+
+	/// <summary>目标外框 = 桌面分辨率 + 非客户区（边框 + 标题栏）；帧为负时钳 0，结果至少 1px。</summary>
+	public static (int Width, int Height) ComputeTargetOuterSize(int desktopWidth, int desktopHeight, int frameWidth, int frameHeight)
+	{
+		int w = desktopWidth + (frameWidth > 0 ? frameWidth : 0);
+		int h = desktopHeight + (frameHeight > 0 ? frameHeight : 0);
+		return (w < 1 ? 1 : w, h < 1 ? 1 : h);
+	}
+
+	/// <summary>
+	/// 工作区内居中坐标。窗口比工作区大时钳到原点——纯居中会把标题栏顶出屏幕，
+	/// 用户将永远拖不动窗口。
+	/// </summary>
+	public static (int X, int Y) ComputeCenteredPosition(int workX, int workY, int workWidth, int workHeight, int outerWidth, int outerHeight)
+	{
+		int x = workX + (workWidth - outerWidth) / 2;
+		int y = workY + (workHeight - outerHeight) / 2;
+		if (x < workX)
+		{
+			x = workX;
+		}
+		if (y < workY)
+		{
+			y = workY;
+		}
+		return (x, y);
+	}
+
+	// ── 会话跟踪 ─────────────────────────────────────────────────────
+
+	private sealed class Session
+	{
+		public Process? Proc;
+
+		public IntPtr Hwnd;
+
+		public int? DesktopWidth;
+
+		public int? DesktopHeight;
+
+		public bool PasteEnabled;
+
+		public bool Centered;
+
+		/// <summary>发现主窗口的截止时刻（Environment.TickCount64）。</summary>
+		public long DeadlineTicks;
+
+		public Timer? Timer;
+	}
+
+	private const int FindWindowTimeoutMs = 30000;
+
+	private const int FindPollIntervalMs = 200;
+
+	/// <summary>兜底轮询间隔：实时修正由 WinEvent 钩子负责，轮询只兜钩子丢失。</summary>
+	private const int PinPollIntervalMs = 500;
+
+	private static readonly object Gate = new object();
+
+	private static readonly List<Session> Sessions = new List<Session>();
+
+	/// <summary>当前跟踪的会话数（单测与诊断用）。</summary>
+	public static int ActiveSessionCount
+	{
+		get
+		{
+			lock (Gate)
+			{
+				return Sessions.Count;
+			}
+		}
+	}
+
+	// 钩子回调委托必须持静态引用：被 GC 后钩子仍指向已回收内存（经典 .NET 陷阱）。
+	private static LowLevelMouseProc? _mouseProc;
+
+	private static WinEventProc? _winEventProc;
+
+	private static IntPtr _mouseHook;
+
+	private static IntPtr _winEventHook;
+
+	/// <summary>右键按下已被本钩子吞掉、等待配对抬起。</summary>
+	private static bool _rightDownSwallowed;
+
+	/// <summary>
+	/// 跟踪一个已启动的 mstsc 进程。<c>client</c> 为 null（测试替身 / 启动失败）时无操作。
+	/// desktopWidth/Height 来自 .rdp 分辨率；redirectClipboard 决定是否接管右键粘贴。
+	/// </summary>
+	public static void Track(Process? client, int? desktopWidth, int? desktopHeight, bool redirectClipboard)
+	{
+		if (client == null)
+		{
+			return;
+		}
+		var (w, h) = NormalizeDesktopSize(desktopWidth, desktopHeight);
+		// 既不锁尺寸又不开右键粘贴 → 没有可管理的行为，不建会话、不装钩子。
+		if (!w.HasValue && !redirectClipboard)
+		{
+			return;
+		}
+		try
+		{
+			Session s = new Session
+			{
+				Proc = client,
+				DesktopWidth = w,
+				DesktopHeight = h,
+				PasteEnabled = redirectClipboard,
+				DeadlineTicks = Environment.TickCount64 + FindWindowTimeoutMs
+			};
+			s.Timer = new Timer(_ => Tick(s), null, 0, FindPollIntervalMs);
+			lock (Gate)
+			{
+				Sessions.Add(s);
+			}
+			if (redirectClipboard)
+			{
+				EnsureMouseHook();
+			}
+			if (w.HasValue)
+			{
+				EnsureWinEventHook();
+			}
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("mstsc 窗口管理启动失败（不影响连接本身）", ex);
+		}
+	}
+
+	private static void Tick(Session s)
+	{
+		try
+		{
+			if (s.Proc == null || s.Proc.HasExited)
+			{
+				DisposeSession(s);
+				return;
+			}
+			if (s.Hwnd == IntPtr.Zero)
+			{
+				s.Proc.Refresh();
+				IntPtr h = s.Proc.MainWindowHandle;
+				if (h == IntPtr.Zero || !IsWindow(h))
+				{
+					if (Environment.TickCount64 > s.DeadlineTicks)
+					{
+						Log.Info("mstsc 主窗口未在时限内出现，停止窗口管理（连接本身不受影响）");
+						DisposeSession(s);
+					}
+					return;
+				}
+				s.Hwnd = h;
+			}
+			if (!IsWindow(s.Hwnd))
+			{
+				DisposeSession(s);
+				return;
+			}
+			// 最小化/最大化是用户的显式动作，让行；恢复后下一轮重新钉住。
+			if (IsIconic(s.Hwnd) || IsZoomed(s.Hwnd))
+			{
+				return;
+			}
+			if (s.DesktopWidth.HasValue)
+			{
+				ApplySizeAndCenter(s);
+			}
+			// 首轮成功后放慢轮询：尺寸实时修正由 WinEvent 钩子负责。
+			s.Timer?.Change(PinPollIntervalMs, PinPollIntervalMs);
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("mstsc 窗口管理轮询异常", ex);
+		}
+	}
+
+	/// <summary>
+	/// 钉尺寸 + 首次居中。帧宽高每轮实测（而非首次记忆）：坏态窗口（如 783×593）与
+	/// 好态窗口的帧一致，按当前帧算目标 → 设为目标 → 下一轮测得同样帧，自稳不来回写。
+	/// </summary>
+	private static void ApplySizeAndCenter(Session s)
+	{
+		if (s.Hwnd == IntPtr.Zero || !GetWindowRect(s.Hwnd, out RECT wr) || !GetClientRect(s.Hwnd, out RECT cr))
+		{
+			return;
+		}
+		int clientW = cr.Right - cr.Left;
+		int clientH = cr.Bottom - cr.Top;
+		if (clientW <= 0 || clientH <= 0)
+		{
+			return;
+		}
+		int frameW = wr.Right - wr.Left - clientW;
+		int frameH = wr.Bottom - wr.Top - clientH;
+		var (targetW, targetH) = ComputeTargetOuterSize(s.DesktopWidth!.Value, s.DesktopHeight!.Value, frameW, frameH);
+		int curW = wr.Right - wr.Left;
+		int curH = wr.Bottom - wr.Top;
+		if (!s.Centered)
+		{
+			IntPtr mon = MonitorFromWindow(s.Hwnd, MONITOR_DEFAULTTONEAREST);
+			MONITORINFO mi = default;
+			mi.cbSize = Marshal.SizeOf<MONITORINFO>();
+			if (GetMonitorInfo(mon, ref mi))
+			{
+				var (x, y) = ComputeCenteredPosition(mi.rcWork.Left, mi.rcWork.Top,
+					mi.rcWork.Right - mi.rcWork.Left, mi.rcWork.Bottom - mi.rcWork.Top, targetW, targetH);
+				SetWindowPos(s.Hwnd, IntPtr.Zero, x, y, targetW, targetH, SWP_NOZORDER | SWP_NOACTIVATE);
+				s.Centered = true;
+				return;
+			}
+			// 取不到显示器信息：跳过居中，只钉尺寸（下次轮询重试居中）。
+		}
+		if (curW != targetW || curH != targetH)
+		{
+			// 只钉尺寸不改坐标：保留用户拖到的位置，宽高比由「外框恒等于目标」保证。
+			SetWindowPos(s.Hwnd, IntPtr.Zero, 0, 0, targetW, targetH, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+		}
+	}
+
+	private static Session? FindSession(IntPtr hwnd)
+	{
+		lock (Gate)
+		{
+			for (int i = 0; i < Sessions.Count; i++)
+			{
+				if (Sessions[i].Hwnd == hwnd)
+				{
+					return Sessions[i];
+				}
+			}
+		}
+		return null;
+	}
+
+	private static bool IsTrackedRoot(IntPtr root)
+	{
+		lock (Gate)
+		{
+			for (int i = 0; i < Sessions.Count; i++)
+			{
+				if (Sessions[i].PasteEnabled && Sessions[i].Hwnd == root)
+				{
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	private static void DisposeSession(Session s)
+	{
+		lock (Gate)
+		{
+			if (!Sessions.Remove(s))
+			{
+				return; // 并发 Tick 只清理一次
+			}
+		}
+		try
+		{
+			s.Timer?.Dispose();
+		}
+		catch
+		{
+		}
+		try
+		{
+			s.Proc?.Dispose(); // 只释放句柄引用，不结束 mstsc 进程
+		}
+		catch
+		{
+		}
+		bool pasteAlive = false;
+		bool sizeAlive = false;
+		lock (Gate)
+		{
+			foreach (Session x in Sessions)
+			{
+				pasteAlive |= x.PasteEnabled;
+				sizeAlive |= x.DesktopWidth.HasValue;
+			}
+		}
+		if (!pasteAlive && _mouseHook != IntPtr.Zero)
+		{
+			UnhookWindowsHookEx(_mouseHook);
+			_mouseHook = IntPtr.Zero;
+		}
+		if (!sizeAlive && _winEventHook != IntPtr.Zero)
+		{
+			UnhookWinEvent(_winEventHook);
+			_winEventHook = IntPtr.Zero;
+		}
+	}
+
+	// ── 钩子安装（须在带消息循环的 UI 线程调用；失败仅降级） ──────────────
+
+	private static void EnsureMouseHook()
+	{
+		if (_mouseHook != IntPtr.Zero)
+		{
+			return;
+		}
+		_mouseProc ??= MouseHookCallback;
+		_mouseHook = SetWindowsHookEx(WH_MOUSE_LL, _mouseProc, IntPtr.Zero, 0);
+		if (_mouseHook == IntPtr.Zero)
+		{
+			Log.Warn("右键粘贴钩子安装失败，右键保持原生行为");
+		}
+	}
+
+	private static void EnsureWinEventHook()
+	{
+		if (_winEventHook != IntPtr.Zero)
+		{
+			return;
+		}
+		_winEventProc ??= WinEventCallback;
+		_winEventHook = SetWinEventHook(EVENT_OBJECT_LOCATIONCHANGE, EVENT_OBJECT_LOCATIONCHANGE,
+			IntPtr.Zero, _winEventProc, 0, 0, WINEVENT_OUTOFCONTEXT);
+		if (_winEventHook == IntPtr.Zero)
+		{
+			Log.Warn("尺寸实时修正钩子安装失败，降级为 500ms 轮询");
+		}
+	}
+
+	// ── WinEvent：窗口移动/缩放瞬间把尺寸钉回去（轮询的实时补充） ─────────
+
+	private static void WinEventCallback(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime)
+	{
+		// OBJID_WINDOW=0：只处理窗口自身的位置变化，忽略子对象。
+		if (eventType != EVENT_OBJECT_LOCATIONCHANGE || hwnd == IntPtr.Zero || idObject != 0)
+		{
+			return;
+		}
+		try
+		{
+			Session? s = FindSession(hwnd);
+			if (s == null || !s.DesktopWidth.HasValue || !s.Centered)
+			{
+				return;
+			}
+			if (IsIconic(hwnd) || IsZoomed(hwnd))
+			{
+				return;
+			}
+			// 我们自己的 SetWindowPos 也会触发本回调：尺寸已对时下一行判断直接返回，无递归。
+			ApplySizeAndCenter(s);
+		}
+		catch
+		{
+			// 钩子回调异常绝不能外抛（会打断宿主消息循环）
+		}
+	}
+
+	// ── 鼠标钩子：远程窗口上的右键 = 粘贴 ────────────────────────────────
+
+	private static IntPtr MouseHookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+	{
+		if (nCode >= 0 && (wParam == (IntPtr)WM_RBUTTONDOWN || wParam == (IntPtr)WM_RBUTTONUP))
+		{
+			MSLLHOOKSTRUCT data = Marshal.PtrToStructure<MSLLHOOKSTRUCT>(lParam);
+			bool down = wParam == (IntPtr)WM_RBUTTONDOWN;
+			if (down)
+			{
+				_rightDownSwallowed = false;
+				// Shift+右键 = 逃生门：原样透传，保留远程原生右键语义（上下文菜单等）。
+				if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0)
+				{
+					return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+				}
+				IntPtr root = GetAncestor(WindowFromPoint(data.pt), GA_ROOT);
+				if (IsTrackedRoot(root))
+				{
+					_rightDownSwallowed = true;
+					SendPaste(root);
+					return (IntPtr)1; // 吞掉按下：不让右键进远程，避免与粘贴叠加弹出菜单
+				}
+			}
+			else if (_rightDownSwallowed)
+			{
+				_rightDownSwallowed = false;
+				return (IntPtr)1; // 配对吞掉抬起，防止远程收到孤立的按钮抬起
+			}
+		}
+		return CallNextHookEx(_mouseHook, nCode, wParam, lParam);
+	}
+
+	/// <summary>
+	/// 把「粘贴」变成一次 Shift+Insert 键入，交给目标应用自己的粘贴语义处理换行——
+	/// 不逐行注入 Enter：多行文本的执行策略（bracketed paste / 多行确认提示 / 逐行执行）
+	/// 由目标终端决定，本地代劳必然与各工具语义打架。
+	/// 选 Shift+Insert 而非 Ctrl+V：conhost、Windows Terminal、PuTTY、标准编辑框全部原生
+	/// 支持；Ctrl+V 在 PuTTY 默认不是粘贴键、老 conhost 还要求「启用 Ctrl 键快捷方式」。
+	/// </summary>
+	private static void SendPaste(IntPtr hwnd)
+	{
+		try
+		{
+			SetForegroundWindow(hwnd); // 键入目标须前台；用户本就点在该窗口，通常已满足
+			keybd_event(VK_SHIFT, 0, 0, UIntPtr.Zero);
+			Thread.Sleep(10);
+			keybd_event(VK_INSERT, 0, 0, UIntPtr.Zero);
+			Thread.Sleep(10);
+			keybd_event(VK_INSERT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+			Thread.Sleep(10);
+			keybd_event(VK_SHIFT, 0, KEYEVENTF_KEYUP, UIntPtr.Zero);
+		}
+		catch (Exception ex)
+		{
+			Log.Warn("右键粘贴键入失败", ex);
+		}
+	}
+
+	// ── Win32 声明 ───────────────────────────────────────────────────
+
+	private const int WH_MOUSE_LL = 14;
+
+	private const int WM_RBUTTONDOWN = 0x0204;
+
+	private const int WM_RBUTTONUP = 0x0205;
+
+	private const int VK_SHIFT = 0x10;
+
+	private const int VK_INSERT = 0x2D;
+
+	private const uint KEYEVENTF_KEYUP = 0x0002;
+
+	private const uint EVENT_OBJECT_LOCATIONCHANGE = 0x800B;
+
+	private const uint WINEVENT_OUTOFCONTEXT = 0x0000;
+
+	private const uint SWP_NOMOVE = 0x0002;
+
+	private const uint SWP_NOZORDER = 0x0004;
+
+	private const uint SWP_NOACTIVATE = 0x0010;
+
+	private const int GA_ROOT = 2;
+
+	private const uint MONITOR_DEFAULTTONEAREST = 2;
+
+	private delegate IntPtr LowLevelMouseProc(int nCode, IntPtr wParam, IntPtr lParam);
+
+	private delegate void WinEventProc(IntPtr hWinEventHook, uint eventType, IntPtr hwnd, int idObject, int idChild, uint dwEventThread, uint dwmsEventTime);
+
+	[StructLayout(LayoutKind.Sequential)]
+	private struct RECT
+	{
+		public int Left;
+
+		public int Top;
+
+		public int Right;
+
+		public int Bottom;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	private struct POINT
+	{
+		public int X;
+
+		public int Y;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	private struct MONITORINFO
+	{
+		public int cbSize;
+
+		public RECT rcMonitor;
+
+		public RECT rcWork;
+
+		public uint dwFlags;
+	}
+
+	[StructLayout(LayoutKind.Sequential)]
+	private struct MSLLHOOKSTRUCT
+	{
+		public POINT pt;
+
+		public uint mouseData;
+
+		public uint flags;
+
+		public uint time;
+
+		public IntPtr dwExtraInfo;
+	}
+
+	[DllImport("user32.dll")]
+	private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+	[DllImport("user32.dll")]
+	private static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+	[DllImport("user32.dll")]
+	private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+	[DllImport("user32.dll")]
+	private static extern bool IsWindow(IntPtr hWnd);
+
+	[DllImport("user32.dll")]
+	private static extern bool IsIconic(IntPtr hWnd);
+
+	[DllImport("user32.dll")]
+	private static extern bool IsZoomed(IntPtr hWnd);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+	[DllImport("user32.dll", CharSet = CharSet.Auto)]
+	private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr WindowFromPoint(POINT point);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr GetAncestor(IntPtr hWnd, uint gaFlags);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelMouseProc lpfn, IntPtr hMod, uint dwThreadId);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+	[DllImport("user32.dll")]
+	private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+	[DllImport("user32.dll")]
+	private static extern short GetAsyncKeyState(int vKey);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern IntPtr SetWinEventHook(uint eventMin, uint eventMax, IntPtr hmodWinEventProc, WinEventProc lpfnWinEventProc, uint idProcess, uint idThread, uint dwFlags);
+
+	[DllImport("user32.dll", SetLastError = true)]
+	private static extern bool UnhookWinEvent(IntPtr hWinEventHook);
+
+	[DllImport("user32.dll")]
+	private static extern bool SetForegroundWindow(IntPtr hWnd);
+
+	[DllImport("user32.dll")]
+	private static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, UIntPtr dwExtraInfo);
 }
 }
 
@@ -1753,7 +2328,11 @@ public static class RdpLauncher
 		AcquireConnection(opt.Host);
 
 		string rdpPath = WriteRdpFile(opt);
-		_backend.StartClient(rdpPath);
+		Process? client = _backend.StartClient(rdpPath);
+
+		// 窗口管理（纯窗口层，不碰 .rdp 内容）：连接后居中 + 外框尺寸钉死（拖动只平移）、
+		// 右键粘贴跟随剪贴板重定向开关——重定向关闭时右键保持远程原生行为。
+		MstscWindowManager.Track(client, opt.Width, opt.Height, opt.RedirectClipboard);
 
 		// mstsc 读取 .rdp 与凭据是异步的，故延迟清理临时文件与一次性凭据。
 		Task.Run(async delegate
