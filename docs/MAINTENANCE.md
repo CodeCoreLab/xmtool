@@ -85,7 +85,7 @@ E:\xmtool\xmtool\
 
 | 依赖 | 版本要求 | 本机现状 | 说明 |
 |---|---|---|---|
-| .NET SDK | 8.0+ | `<sdk-dir>`（8.0.426） | **本机系统只有 Runtime，SDK 装在用户目录** |
+| .NET SDK | 10.0+（net10.0-windows） | `E:\dotnet-sdk-10.0.100`（10.0.100） | **本机系统 PATH 只有 Runtime，SDK 在独立目录；8.0.426 无法构建 net10 工程** |
 | Windows | Win10+ x64 | — | WPF 仅 Windows |
 | Node.js（仅页面验证用） | 22+ | `<node-dir>` | 跑 Playwright 校验脚本 |
 | Python（仅工具脚本用） | 3.11+ | `<python-dir>` | 依赖 paramiko（部署） |
@@ -98,8 +98,9 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1
 DOTNET="<sdk-dir>/dotnet.exe"
 ```
 
-> **踩坑**：SDK 若丢失（版本目录被清理），从 `https://dotnetcli.azureedge.net/dotnet/Sdk/8.0.426/dotnet-sdk-8.0.426-win-x64.zip`
-> 下载解压即可。`builds.dotnet.microsoft.com` 在本机代理下 TLS 握手必败，勿用。
+> **踩坑**：SDK 若丢失（版本目录被清理），从 azureedge CDN 按同构 URL 下载解压即可：
+> `https://dotnetcli.azureedge.net/dotnet/Sdk/<版本>/dotnet-sdk-<版本>-win-x64.zip`（如 10.0.100）。
+> `builds.dotnet.microsoft.com` 在本机代理下 TLS 握手必败，勿用。
 
 ---
 
@@ -126,10 +127,10 @@ git commit -m "fix: <一句话说明>"
 cd ./src/RemoteDesktopPlus
 $DOTNET build RemoteDesktopPlus.csproj -c Release          # 期望：0 警告 0 错误
 $DOTNET test tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Release
-                                                          # 期望：122/122 通过
+                                                          # 期望：189/189 通过
 ```
 
-**回归基线**：122 项测试全通过。任何改动致测试数下降或失败，**禁止进入发布环节**。
+**回归基线**：189 项测试全通过（2026-11-09，含窗口管理器 14 项）。任何改动致测试数下降或失败，**禁止进入发布环节**。
 
 ### 3.3 冒烟测试（发布前必做）
 
