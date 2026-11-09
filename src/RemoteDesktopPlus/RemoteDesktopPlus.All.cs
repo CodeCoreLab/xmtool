@@ -349,6 +349,23 @@ public static class SettingKeys
 
 	/// <summary>分组级配置覆盖表（JSON），见 <see cref="GroupOptionStore"/>。</summary>
 	public const string OptionGroupOverrides = "options.group_overrides";
+
+	// ── 以下为 v2.1.0 移植小马线 v1.2.0 增量功能的新增键 ──
+
+	/// <summary>开机自启开关（计划任务实现，见 <see cref="AutoStartService"/>）。</summary>
+	public const string OptionAutoStart = "options.auto_start";
+
+	/// <summary>点关闭按钮时隐藏到托盘（true=隐藏，false=真退出）。默认 true。</summary>
+	public const string OptionCloseToTray = "options.close_to_tray";
+
+	/// <summary>最小化时隐藏到托盘。默认 true。</summary>
+	public const string OptionMinimizeToTray = "options.minimize_to_tray";
+
+	/// <summary>按 ESC 隐藏到托盘。默认 false。</summary>
+	public const string OptionEscToTray = "options.esc_to_tray";
+
+	/// <summary>主窗口置顶。默认 false。</summary>
+	public const string OptionTopmost = "options.topmost";
 }
 }
 
@@ -2609,6 +2626,9 @@ public interface IDialogService
 	/// <returns>用户是否点了确定。</returns>
 	bool SetLaunchPassword();
 
+	/// <summary>打开「设置」窗口（v2.1.0，常规/显示/本地资源/体验/高级页签）。</summary>
+	void ShowSettings();
+
 	/// <summary>打开主密码对话框（设置或解锁，由 <paramref name="purpose"/> 决定）。</summary>
 	/// <returns>用户是否点了确定。</returns>
 	bool ShowMasterPassword(MasterPasswordPurpose purpose);
@@ -3125,6 +3145,107 @@ public static class RdpServerService
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 追加区段：RemoteDesktopPlus.Services/AutoStartService.cs  →  namespace RemoteDesktopPlus.Services
+// ════════════════════════════════════════════════════════════════════════
+namespace RemoteDesktopPlus.Services
+{
+using System;
+using System.Diagnostics;
+using System.IO;
+
+/// <summary>
+/// 开机自启服务：用**计划任务**而非 HKCU Run 键实现。
+/// <para>
+/// 为什么不用注册表 Run 键：本程序 app.manifest 声明 <c>requireAdministrator</c>，
+/// UAC 对「提权进程写 Run 键 + 开机静默拉起提权进程」有专门拦截 —— 写键能成功，
+/// 但登录时该项会被静默跳过（事件日志 Event ID  ForgottenRunKey 类问题），
+/// 用户只会看到「明明开了自启却从不生效」。
+/// </para>
+/// <para>
+/// 计划任务方案：<c>schtasks /create /sc onlogon /rl highest /f</c>，任务以
+/// 「登录时 + 最高权限」运行，绕过 UAC 弹窗且能真正静默拉起提权进程。
+/// 任务名固定，重复 create 用 /f 覆盖，天然幂等；删除用 /delete /f。
+/// </para>
+/// </summary>
+public static class AutoStartService
+{
+	/// <summary>计划任务名。加产品前缀避免与系统任务撞名。</summary>
+	public const string TaskName = "XiaomaRemoteDesktop_AutoStart";
+
+	/// <summary>读取当前自启开关状态（仅查应用自己的持久化设置）。</summary>
+	public static bool IsEnabled(DatabaseService db)
+	{
+		string raw = db.GetSetting(SettingKeys.OptionAutoStart);
+		return bool.TryParse(raw, out bool v) && v;
+	}
+
+	/// <summary>
+	/// 开关自启。写设置与建/删任务在同一事务语义下处理：任务操作失败时抛出，
+	/// 由调用方提示用户；设置回写放在成功路径上，保证「设置值 = 实际状态」。
+	/// </summary>
+	public static void SetEnabled(DatabaseService db, bool enabled, string exePath)
+	{
+		if (enabled)
+		{
+			CreateTask(exePath);
+		}
+		else
+		{
+			DeleteTask();
+		}
+		db.SetSetting(SettingKeys.OptionAutoStart, enabled.ToString());
+	}
+
+	/// <summary>当前 exe 的完整路径（自启任务要指向它）。</summary>
+	public static string GetExecutablePath()
+	{
+		return Environment.ProcessPath
+			?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+	}
+
+	private static void CreateTask(string exePath)
+	{
+		// --silent：登录拉起时直接进托盘，不弹主窗（见 App.OnStartup 对该参数的处理）。
+		// /rl highest：与 manifest 的 requireAdministrator 对齐，避免 UAC 弹窗。
+		// /f：已存在同名任务时覆盖，保证路径变更（升级/换目录）后任务始终指向新位置。
+		RunSchtasks($" /create /tn \"{TaskName}\" /tr \"\\\"{exePath}\\\" --silent\" /sc onlogon /rl highest /f");
+	}
+
+	private static void DeleteTask()
+	{
+		// /f：任务不存在时不报错，幂等删除。
+		RunSchtasks($" /delete /tn \"{TaskName}\" /f");
+	}
+
+	private static void RunSchtasks(string arguments)
+	{
+		try
+		{
+			using Process process = Process.Start(new ProcessStartInfo
+			{
+				FileName = "schtasks.exe",
+				Arguments = arguments,
+				UseShellExecute = false,
+				CreateNoWindow = true,
+				RedirectStandardOutput = true,
+				RedirectStandardError = true
+			}) ?? throw new InvalidOperationException("无法启动 schtasks.exe");
+			process.WaitForExit(10000);
+			if (process.ExitCode != 0)
+			{
+				string stderr = process.StandardError.ReadToEnd();
+				throw new InvalidOperationException("schtasks 退出码 " + process.ExitCode + "：" + stderr.Trim());
+			}
+		}
+		catch (Exception ex) when (ex is not InvalidOperationException)
+		{
+			throw new InvalidOperationException("计划任务操作失败：" + ex.Message, ex);
+		}
+	}
+}
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 区段 18 / 39：RemoteDesktopPlus.Services/TrayController.cs  →  namespace RemoteDesktopPlus.Services
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Services
@@ -3138,8 +3259,14 @@ using Application = System.Windows.Application;
 using MessageBox = System.Windows.MessageBox;
 
 /// <summary>
-/// 系统托盘控制器：最小化/关闭到托盘，左键单击恢复，右键菜单（打开/退出）。
-/// 新增功能，原版无此能力。
+/// 托盘行为配置（v2.1.0 移植小马线）。三个独立开关对应设置界面的三个选项；
+/// 默认值 = 旧版硬编码行为（关窗/最小化都进托盘，ESC 不响应），升级无感知。
+/// </summary>
+public sealed record TrayBehavior(bool CloseToTray = true, bool MinimizeToTray = true, bool EscToTray = false);
+
+/// <summary>
+/// 系统托盘控制器：最小化/关闭到托盘（v2.1.0 起三档行为可配置），
+/// 左键单击恢复，右键菜单（打开/退出）。
 /// </summary>
 public class TrayController : IDisposable
 {
@@ -3147,6 +3274,9 @@ public class TrayController : IDisposable
 	private readonly NotifyIcon _icon;
 	private bool _disposed;
 	private bool _exitRequested;
+
+	/// <summary>托盘行为配置。默认值与旧版硬编码行为一致。</summary>
+	private TrayBehavior _behavior = new TrayBehavior();
 
 	public TrayController(Window main)
 	{
@@ -3180,8 +3310,8 @@ public class TrayController : IDisposable
 
 	private void OnStateChanged(object sender, EventArgs e)
 	{
-		// 最小化 → 藏进托盘
-		if (_main.WindowState == WindowState.Minimized)
+		// 最小化 → 按开关决定是否藏进托盘（默认藏，旧行为）
+		if (_main.WindowState == WindowState.Minimized && _behavior.MinimizeToTray)
 		{
 			_main.Hide();
 		}
@@ -3189,12 +3319,18 @@ public class TrayController : IDisposable
 
 	private void OnClosing(object sender, System.ComponentModel.CancelEventArgs e)
 	{
-		if (!_exitRequested)
+		if (!_exitRequested && _behavior.CloseToTray)
 		{
 			// 点关闭 → 隐藏到托盘而不是退出
 			e.Cancel = true;
 			_main.Hide();
 		}
+	}
+
+	/// <summary>应用新的托盘行为（由 VM 在设置变化时调用；null 恢复默认）。</summary>
+	public void ApplyBehavior(TrayBehavior? behavior)
+	{
+		_behavior = behavior ?? new TrayBehavior();
 	}
 
 	private void RestoreFromTray()
@@ -3316,10 +3452,33 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	private bool sortByRecent;
 
 	/// <summary>
-	/// 是否允许手工拖拽排序（= 未按最近连接排序）。
-	/// 供 UI 绑定 DragSource/DropTarget 开关，避免在自动排序时给出可拖的假象。
+	/// 是否允许手工拖拽排序（= 未按最近连接排序，且未处于多选状态）。
+	/// 供 UI 绑定 DragSource/DropTarget 开关，避免在自动排序时给出可拖的假象；
+	/// 多选（批量连接）状态下临时禁用拖拽，避免误触重排（v2.1.0 护栏）。
 	/// </summary>
-	public bool CanReorderManually => !SortByRecent;
+	public bool CanReorderManually => !SortByRecent && SelectedCount <= 1;
+
+	/// <summary>当前列表选中行数（批量连接/拖拽护栏依据，由视图层回填）。</summary>
+	[ObservableProperty]
+	[NotifyPropertyChangedFor(nameof(CanReorderManually))]
+	private int selectedCount;
+
+	// —— v2.1.0：托盘行为/自启/置顶（移植小马线 v1.2.0）。加载与写回见 LoadOptions
+	//    与各 OnXxxChanged；托盘实例由组合根在创建 TrayController 后注册回调。 ——
+	[ObservableProperty]
+	private bool autoStart;
+
+	[ObservableProperty]
+	private bool closeToTray = true;
+
+	[ObservableProperty]
+	private bool minimizeToTray = true;
+
+	[ObservableProperty]
+	private bool escToTray;
+
+	[ObservableProperty]
+	private bool topmost;
 
 	[ObservableProperty]
 	private bool isRemoteEnabled;
@@ -3584,11 +3743,127 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 				RedirectClipboard = result3;
 			}
 			SortByRecent = string.Equals(_db.GetSetting(SettingKeys.OptionSortMode), "recent", StringComparison.OrdinalIgnoreCase);
+			// —— v2.1.0：托盘行为/置顶/自启。自启只回读设置值（计划任务的真实状态
+			//    以 schtasks 为准，但建/删动作都由本程序完成，设置值即事实状态）。
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionAutoStart), out var resultAuto))
+			{
+				AutoStart = resultAuto;
+			}
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionCloseToTray), out var resultClose))
+			{
+				CloseToTray = resultClose;
+			}
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionMinimizeToTray), out var resultMin))
+			{
+				MinimizeToTray = resultMin;
+			}
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionEscToTray), out var resultEsc))
+			{
+				EscToTray = resultEsc;
+			}
+			if (bool.TryParse(_db.GetSetting(SettingKeys.OptionTopmost), out var resultTop))
+			{
+				Topmost = resultTop;
+			}
 		}
 		finally
 		{
 			_suppressOptionSave = false;
 		}
+		// 托盘行为随加载一次性生效（TrayController 由组合根在 VM 之后创建并注册回调）。
+		TrayBehaviorChanged?.Invoke(this, BuildTrayBehavior());
+		if (Topmost)
+		{
+			TopmostChanged?.Invoke(this, true);
+		}
+	}
+
+	/// <summary>托盘行为变化事件：组合根订阅它把新行为转给 TrayController。</summary>
+	public event EventHandler<TrayBehavior>? TrayBehaviorChanged;
+
+	/// <summary>置顶开关变化事件：组合根订阅它把值套到主窗口（VM 不碰 Window）。</summary>
+	public event EventHandler<bool>? TopmostChanged;
+
+	/// <summary>ESC 隐藏请求（v2.1.0）：窗口订阅它自己 Hide —— 不经过
+	/// TrayController，Hide 不引发 Closing，与「关窗进托盘」逻辑天然兼容。</summary>
+	public event EventHandler? EscHideRequested;
+
+	/// <summary>视图层调用：ESC 按下时转发（EscToTray 开关判断在此处统一收口）。</summary>
+	public void RequestEscHide()
+	{
+		if (EscToTray)
+		{
+			EscHideRequested?.Invoke(this, EventArgs.Empty);
+		}
+	}
+
+	/// <summary>按当前开关装配托盘行为快照。</summary>
+	private TrayBehavior BuildTrayBehavior()
+	{
+		return new TrayBehavior(CloseToTray, MinimizeToTray, EscToTray);
+	}
+
+	// —— v2.1.0：开关写回 + 托盘/置顶联动。自启走 AutoStartService（计划任务）。 ——
+	partial void OnAutoStartChanged(bool value)
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		try
+		{
+			AutoStartService.SetEnabled(_db, value, AutoStartService.GetExecutablePath());
+		}
+		catch (Exception ex)
+		{
+			// 任务创建失败（如被组策略禁用）：回滚 UI 状态，提示用户。
+			Log.Error("开机自启设置失败", ex);
+			_dialogs.ShowMessage("开机自启设置失败：" + ex.Message, "错误", DialogKind.Error);
+			_suppressOptionSave = true;
+			AutoStart = !value;
+			_suppressOptionSave = false;
+			return;
+		}
+	}
+
+	partial void OnCloseToTrayChanged(bool value)
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		_db.SetSetting(SettingKeys.OptionCloseToTray, value.ToString());
+		TrayBehaviorChanged?.Invoke(this, BuildTrayBehavior());
+	}
+
+	partial void OnMinimizeToTrayChanged(bool value)
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		_db.SetSetting(SettingKeys.OptionMinimizeToTray, value.ToString());
+		TrayBehaviorChanged?.Invoke(this, BuildTrayBehavior());
+	}
+
+	partial void OnEscToTrayChanged(bool value)
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		_db.SetSetting(SettingKeys.OptionEscToTray, value.ToString());
+		TrayBehaviorChanged?.Invoke(this, BuildTrayBehavior());
+	}
+
+	partial void OnTopmostChanged(bool value)
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		_db.SetSetting(SettingKeys.OptionTopmost, value.ToString());
+		TopmostChanged?.Invoke(this, value);
 	}
 
 	/// <summary>
@@ -3798,6 +4073,27 @@ public partial class MainViewModel
 			_db.UpdateLastConnectedAt(item.Id, now);
 			// 回写后立刻让「最近连接」列与排序反映变化，而不是等下次启动。
 			ApplySortInPlace();
+		}
+	}
+
+	/// <summary>
+	/// 批量连接（v2.1.0 移植小马线）：对视图层选中的多条连接逐条发起会话。
+	/// <para>
+	/// 每条都走 <see cref="BuildEffectiveOptions"/>（组覆盖/分辨率全生效）并回写
+	/// LastConnectedAt，与单条连接语义一致。逐条 Launch 而非并发：凭据写入
+	/// 是按 TERMSRV/host 全局键，串行写避免互相覆盖的中间态；mstsc 本身异步拉起，
+	/// 十条以内串行延迟无感。单条失败已由 ConnectItem 兜底提示，不中断其余连接。
+	/// </para>
+	/// </summary>
+	public void BatchConnect(IReadOnlyList<ConnectionItem> items)
+	{
+		if (items == null || items.Count == 0)
+		{
+			return;
+		}
+		foreach (ConnectionItem item in items)
+		{
+			ConnectItem(item);
 		}
 	}
 
@@ -4097,6 +4393,13 @@ public partial class MainViewModel
 		}
 		_launcher.ClearCredential(Host);
 		_dialogs.ShowMessage("已清理 " + Host + " 的旧凭证，下次连接时会重新保存。", "凭证修复");
+	}
+
+	/// <summary>打开设置窗口（v2.1.0）。对话框由视图层 WpfDialogService 承载（MVVM 边界）。</summary>
+	[RelayCommand]
+	private void OpenSettings()
+	{
+		_dialogs.ShowSettings();
 	}
 }
 }
@@ -4810,6 +5113,39 @@ public partial class GroupSettingsWindow : Window
 }
 }
 
+// ══════════════════════════════════════════════════════════════════════════
+// 追加区段：RemoteDesktopPlus.Views/SettingsWindow.cs  →  namespace RemoteDesktopPlus.Views
+// ════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+namespace RemoteDesktopPlus.Views
+{
+using System.Windows;
+using System.Windows.Controls;
+
+/// <summary>
+/// 设置窗口（v1.2.0，枢联 1.10 移植）：mstsc 风格原生项。
+/// <para>
+/// 直接绑 Owner 的 MainViewModel：所有选项都是 VM 的公共可观察属性，
+/// 勾选即写回（OnXxxChanged 持久化），无需独立 ViewModel 与确定按钮。
+/// 「显示模式」互斥语义（冲突项 C4）：预设档时单项页签整体禁用。
+/// </para>
+/// </summary>
+public partial class SettingsWindow : Window
+{
+	public SettingsWindow()
+	{
+		InitializeComponent();
+		Loaded += delegate
+		{
+			if (Owner?.DataContext is RemoteDesktopPlus.ViewModels.MainViewModel)
+			{
+				DataContext = Owner.DataContext;
+			}
+		};
+	}
+}
+}
+
 // ════════════════════════════════════════════════════════════════════════
 // 区段 28 / 39：RemoteDesktopPlus.Views/EditConnectionWindow.cs  →  namespace RemoteDesktopPlus.Views
 // ════════════════════════════════════════════════════════════════════════
@@ -4986,7 +5322,10 @@ public partial class EditConnectionWindow : Window, INotifyPropertyChanged
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Views
 {
+using System;
+using System.Collections.Generic;
 using System.ComponentModel;
+using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -5026,6 +5365,14 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		InitializeComponent();
 		base.DataContext = viewModel;
 		base.Loaded += OnLoaded;
+		// ESC 隐藏（v2.1.0）：VM 发事件，窗口执行 Hide。托盘常驻由 TrayController 兜住。
+		viewModel.EscHideRequested += delegate
+		{
+			Hide();
+		};
+		// 置顶初值：VM LoadOptions 已回读设置；组合根的 TopmostChanged 事件只在
+		// 变化时发，初值在这里对齐一次。
+		Topmost = viewModel.Topmost;
 	}
 
 	private void OnLoaded(object sender, RoutedEventArgs e)
@@ -5075,6 +5422,16 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		aboutWindow.ShowDialog();
 	}
 
+	/// <summary>设置窗口入口（v2.1.0）：DataContext 已是 MainViewModel，直接模态展示。</summary>
+	private void SettingsButton_Click(object sender, RoutedEventArgs e)
+	{
+		SettingsWindow settingsWindow = new SettingsWindow
+		{
+			Owner = this
+		};
+		settingsWindow.ShowDialog();
+	}
+
 	private void ConnList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
 	{
 		if (sender is not DataGrid)
@@ -5085,6 +5442,55 @@ public partial class MainWindow : Window, INotifyPropertyChanged
 		if (row?.Item is ConnectionItem item && base.DataContext is MainViewModel mainViewModel)
 		{
 			mainViewModel.ConnectItem(item);
+		}
+	}
+
+	/// <summary>
+	/// 列表选中行数回填（v2.1.0）：批量连接的依据 + 多选拖拽护栏的开关信号。
+	/// SelectedItems 是 DataGrid 的视图层概念，从 code-behind 回填到 VM 计数，
+	/// 保持 VM 不引用控件类型。
+	/// </summary>
+	private void ConnList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+	{
+		if (sender is DataGrid grid && base.DataContext is MainViewModel mainViewModel)
+		{
+			mainViewModel.SelectedCount = grid.SelectedItems.Count;
+		}
+	}
+
+	/// <summary>
+	/// 批量连接按钮（v2.1.0）。选中 >1 条才批量；单选退化为普通双击语义（连选中的那条）。
+	/// </summary>
+	private void BatchConnectButton_Click(object sender, RoutedEventArgs e)
+	{
+		if (base.DataContext is not MainViewModel mainViewModel)
+		{
+			return;
+		}
+		List<ConnectionItem> selected = ConnList.SelectedItems
+			.OfType<ConnectionItem>()
+			.ToList();
+		if (selected.Count == 0)
+		{
+			mainViewModel.SelectedCount = 0;
+			return;
+		}
+		if (selected.Count == 1)
+		{
+			mainViewModel.ConnectItem(selected[0]);
+			return;
+		}
+		mainViewModel.BatchConnect(selected);
+	}
+
+	/// <summary>
+	/// ESC 隐藏到托盘（v2.1.0）。行为开关在 VM（EscToTray），由 RequestEscHide 收口。
+	/// </summary>
+	private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
+	{
+		if (e.Key == Key.Escape && base.DataContext is MainViewModel mainViewModel)
+		{
+			mainViewModel.RequestEscHide();
 		}
 	}
 
@@ -5181,6 +5587,14 @@ public sealed class WpfDialogService : IDialogService
 		SetLaunchPasswordWindow window = new SetLaunchPasswordWindow(_db, _crypto);
 		window.Owner = OwnerOrNull();
 		return window.ShowDialog().GetValueOrDefault();
+	}
+
+	/// <summary>设置窗口（v2.1.0）：DataContext 继承 Owner 的 VM，模态展示。</summary>
+	public void ShowSettings()
+	{
+		SettingsWindow window = new SettingsWindow();
+		window.Owner = OwnerOrNull();
+		window.ShowDialog();
 	}
 
 	public bool EditGroupOptions(string groupName, GroupOptionStore store, IReadOnlyList<string> resolutionOptions, IReadOnlyList<string> driveLetterOptions)
@@ -5502,6 +5916,7 @@ namespace RemoteDesktopPlus
 using System;
 using System.IO;
 using System.IO.Pipes;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -5671,8 +6086,23 @@ public partial class App : Application
 		{
 			Shutdown();
 		};
-		mainWindow.Show();
 		_tray = new TrayController(mainWindow);
+		// 托盘行为/置顶开关 → TrayController：VM 侧只发事件，不碰 Window（分层约束）。
+		viewModel.TrayBehaviorChanged += (_, behavior) => _tray.ApplyBehavior(behavior);
+		viewModel.TopmostChanged += (_, value) => mainWindow.Topmost = value;
+
+		// —— v2.1.0 开机自启静默路径（移植小马线，冲突项 C1 的落地）——
+		// 条件 = 命令行带 --silent（计划任务登录拉起）。门禁语义：
+		//   已配置启动密码 → OnStartup 前段已强制解锁（解锁失败即 Shutdown），
+		//     走到这里且有密码 = 已解锁，防窥语义不被静默绕过；
+		//   未配置启动密码 → 直接进托盘。
+		// 此处只决定「要不要显示主窗」：Show 先建句柄（NotifyIcon 托得住）再 Hide。
+		bool silentStart = e.Args is { Length: > 0 } && e.Args.Contains("--silent");
+		mainWindow.Show();
+		if (silentStart)
+		{
+			mainWindow.Hide();
+		}
 		StartActivationListener(mainWindow);
 	}
 

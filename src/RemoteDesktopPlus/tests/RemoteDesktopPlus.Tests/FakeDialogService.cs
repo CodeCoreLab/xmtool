@@ -65,6 +65,14 @@ public sealed class FakeDialogService : IDialogService
 		return SetLaunchPasswordAnswers.Count > 0 && SetLaunchPasswordAnswers.Dequeue();
 	}
 
+	/// <summary>v2.1.0：设置窗口调用计数（设置窗口本身不进单测，记录调用即可）。</summary>
+	public int SettingsShownCount { get; private set; }
+
+	public void ShowSettings()
+	{
+		SettingsShownCount++;
+	}
+
 	public bool ShowMasterPassword(MasterPasswordPurpose purpose)
 	{
 		MasterPasswordPurposes.Add(purpose);
