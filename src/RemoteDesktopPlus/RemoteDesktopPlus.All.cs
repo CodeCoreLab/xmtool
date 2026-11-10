@@ -2248,7 +2248,7 @@ public static class RdpLauncher
 		bool ShowConnectionBar = true,
 		int AudioMode = 0,
 		int KeyboardHook = 2,
-		bool RedirectPrinters = false,
+		bool RedirectPrinters = true,
 		bool DisableWallpaper = false,
 		bool AllowFontSmoothing = true,
 		bool AllowDesktopComposition = true,
@@ -2257,12 +2257,10 @@ public static class RdpLauncher
 		bool DisableThemes = false,
 		bool BitmapCachePersist = true,
 		bool AutoReconnect = true,
-		int AuthLevel = 0)
+		int ConnectionType = 7,
+		int AuthLevel = 2,
+		bool UseWebAuth = false)
 	{
-		/// <summary>显示模式（v2.1.1）：0=性能预设，1=自定义 —— 自定义时按单项开关逐键写出。</summary>
-		public const int DisplayModePreset = 0;
-
-		public const int DisplayModeCustom = 1;
 		/// <summary>
 		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
 		/// `*`（全部，含之后接入的）与 `DynamicDrives`（仅之后接入的）；此处用 `*`，
@@ -2519,26 +2517,25 @@ public static class RdpLauncher
 			sb.AppendLine("connect to console:i:1");
 		}
 
-		// —— v2.1.1：设置页签「自定义」档的 mstsc 原生键。预设档完全跳过，
-		//    与预设档键组互斥（二者不同时生效，写入源只有本方法一处）。 ——
-		if (opt.DisplayMode == RdpOptions.DisplayModeCustom)
-		{
-			sb.AppendLine($"use multimon:i:{(opt.UseMultiMon ? 1 : 0)}");
-			sb.AppendLine($"session bpp:i:{opt.ColorDepth}");
-			sb.AppendLine($"displayconnectionbar:i:{(opt.ShowConnectionBar ? 1 : 0)}");
-			sb.AppendLine($"audiomode:i:{opt.AudioMode}");
-			sb.AppendLine($"keyboardhook:i:{opt.KeyboardHook}");
-			sb.AppendLine($"redirectprinters:i:{(opt.RedirectPrinters ? 1 : 0)}");
-			sb.AppendLine($"disable wallpaper:i:{(opt.DisableWallpaper ? 1 : 0)}");
-			sb.AppendLine($"allow font smoothing:i:{(opt.AllowFontSmoothing ? 1 : 0)}");
-			sb.AppendLine($"allow desktop composition:i:{(opt.AllowDesktopComposition ? 1 : 0)}");
-			sb.AppendLine($"disable full window drag:i:{(opt.DisableFullWindowDrag ? 1 : 0)}");
-			sb.AppendLine($"disable menu anims:i:{(opt.DisableMenuAnims ? 1 : 0)}");
-			sb.AppendLine($"disable themes:i:{(opt.DisableThemes ? 1 : 0)}");
-			sb.AppendLine($"bitmapcachepersistenable:i:{(opt.BitmapCachePersist ? 1 : 0)}");
-			sb.AppendLine($"autoreconnection enabled:i:{(opt.AutoReconnect ? 1 : 0)}");
-			sb.AppendLine($"authentication level:i:{opt.AuthLevel}");
-		}
+		// —— v2.1.2：mstsc 原生键无条件写出（对齐原版）。默认值 = mstsc 默认值，
+		//    改了设置才产生差异，不重蹈 v2.0.0「流畅优先档」画质模糊的覆辙。 ——
+		sb.AppendLine($"use multimon:i:{(opt.UseMultiMon ? 1 : 0)}");
+		sb.AppendLine($"session bpp:i:{opt.ColorDepth}");
+		sb.AppendLine($"displayconnectionbar:i:{(opt.ShowConnectionBar ? 1 : 0)}");
+		sb.AppendLine($"audiomode:i:{opt.AudioMode}");
+		sb.AppendLine($"keyboardhook:i:{opt.KeyboardHook}");
+		sb.AppendLine($"redirectprinters:i:{(opt.RedirectPrinters ? 1 : 0)}");
+		sb.AppendLine($"connection type:i:{opt.ConnectionType}");
+		sb.AppendLine($"disable wallpaper:i:{(opt.DisableWallpaper ? 1 : 0)}");
+		sb.AppendLine($"allow font smoothing:i:{(opt.AllowFontSmoothing ? 1 : 0)}");
+		sb.AppendLine($"allow desktop composition:i:{(opt.AllowDesktopComposition ? 1 : 0)}");
+		sb.AppendLine($"disable full window drag:i:{(opt.DisableFullWindowDrag ? 1 : 0)}");
+		sb.AppendLine($"disable menu anims:i:{(opt.DisableMenuAnims ? 1 : 0)}");
+		sb.AppendLine($"disable themes:i:{(opt.DisableThemes ? 1 : 0)}");
+		sb.AppendLine($"bitmapcachepersistenable:i:{(opt.BitmapCachePersist ? 1 : 0)}");
+		sb.AppendLine($"autoreconnection enabled:i:{(opt.AutoReconnect ? 1 : 0)}");
+		sb.AppendLine($"authentication level:i:{opt.AuthLevel}");
+		sb.AppendLine($"enablecredsspsupport:i:{(opt.UseWebAuth ? 0 : 1)}");
 		return sb.ToString();
 	}
 
@@ -3586,7 +3583,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	private int selectedKeyboardHook = 2;
 
 	[ObservableProperty]
-	private bool redirectPrinters;
+	private bool redirectPrinters = true;
 
 	[ObservableProperty]
 	private bool disableWallpaper;
@@ -3613,14 +3610,11 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	private bool autoReconnect = true;
 
 	[ObservableProperty]
-	private int selectedAuthLevel;
+	private int selectedAuthLevel = 2;
 
-	/// <summary>显示模式：true=性能预设（默认），false=自定义。双 Radio 绑定用。</summary>
+	/// <summary>Web 帐户登录（原版同名字段）：开 = enablecredsspsupport:0（禁用 CredSSP）。</summary>
 	[ObservableProperty]
-	private bool isPerformancePreset = true;
-
-	/// <summary>IsPerformancePreset 的反转视图（自定义 Radio 绑定）。</summary>
-	public bool IsCustomDisplay => !IsPerformancePreset;
+	private bool useWebAuth;
 
 	// —— v2.1.1：设置页签下拉候选（与 mstsc 原生项对齐）。string[] 形态绑定 ComboBox。 ——
 	public IReadOnlyList<string> ColorDepthOptions { get; } = new string[] { "15 位", "16 位", "24 位", "32 位" };
@@ -4155,7 +4149,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				return;
 			}
-			IsPerformancePreset = loaded.IsPreset;
 			UseMultiMon = loaded.UseMultiMon;
 			SelectedColorDepth = loaded.ColorDepth;
 			ShowConnectionBar = loaded.ShowConnectionBar;
@@ -4171,6 +4164,8 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			BitmapCachePersist = loaded.BitmapCachePersist;
 			AutoReconnect = loaded.AutoReconnect;
 			SelectedAuthLevel = loaded.AuthLevel;
+			SelectedConnectionType = loaded.ConnectionType;
+			UseWebAuth = loaded.UseWebAuth;
 		}
 		catch (Exception ex)
 		{
@@ -4187,7 +4182,6 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		}
 		var state = new CustomDisplayState
 		{
-			IsPreset = IsPerformancePreset,
 			UseMultiMon = UseMultiMon,
 			ColorDepth = SelectedColorDepth,
 			ShowConnectionBar = ShowConnectionBar,
@@ -4202,7 +4196,9 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			DisableThemes = DisableThemes,
 			BitmapCachePersist = BitmapCachePersist,
 			AutoReconnect = AutoReconnect,
-			AuthLevel = SelectedAuthLevel
+			AuthLevel = SelectedAuthLevel,
+			ConnectionType = SelectedConnectionType,
+			UseWebAuth = UseWebAuth
 		};
 		_db.SetSetting(CustomDisplayOptionsKey, System.Text.Json.JsonSerializer.Serialize(state));
 	}
@@ -4216,7 +4212,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		public bool ShowConnectionBar { get; set; } = true;
 		public int AudioMode { get; set; }
 		public int KeyboardHook { get; set; } = 2;
-		public bool RedirectPrinters { get; set; }
+		public bool RedirectPrinters { get; set; } = true;
 		public bool DisableWallpaper { get; set; }
 		public bool AllowFontSmoothing { get; set; } = true;
 		public bool AllowDesktopComposition { get; set; } = true;
@@ -4225,13 +4221,9 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		public bool DisableThemes { get; set; }
 		public bool BitmapCachePersist { get; set; } = true;
 		public bool AutoReconnect { get; set; } = true;
-		public int AuthLevel { get; set; }
-	}
-
-	partial void OnIsPerformancePresetChanged(bool value)
-	{
-		OnPropertyChanged(nameof(IsCustomDisplay));
-		SaveCustomDisplayOptions();
+		public int AuthLevel { get; set; } = 2;
+		public int ConnectionType { get; set; } = 7;
+		public bool UseWebAuth { get; set; }
 	}
 
 	partial void OnUseMultiMonChanged(bool value) => SaveCustomDisplayOptions();
@@ -4248,6 +4240,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	partial void OnBitmapCachePersistChanged(bool value) => SaveCustomDisplayOptions();
 	partial void OnAutoReconnectChanged(bool value) => SaveCustomDisplayOptions();
 	partial void OnSelectedAuthLevelChanged(int value) => SaveCustomDisplayOptions();
+partial void OnUseWebAuthChanged(bool value) => SaveCustomDisplayOptions();
 
 	/// <summary>
 	/// 把「1920*1080」「1280x720」「全屏」解析为像素尺寸。
@@ -4435,19 +4428,14 @@ public partial class MainViewModel
 	}
 
 	/// <summary>
-	/// 把设置页签的自定义档选项合并进 RdpOptions（v2.1.1）。
-	/// 预设档原样返回；自定义档用 with 覆盖 DisplayMode 与各单项。
-	/// 唯一合并入口，保证两档互斥语义只在一处实现。
+	/// 把设置页签选项合并进 RdpOptions。唯一合并入口。
+	/// v2.1.2：无预设/自定义档之分（对齐原版），全部选项无条件生效；
+	/// 默认值 = mstsc 默认值，改了设置才产生差异。
 	/// </summary>
 	private RdpLauncher.RdpOptions WithCustomDisplayArgs(RdpLauncher.RdpOptions opt)
 	{
-		if (IsPerformancePreset)
-		{
-			return opt;
-		}
 		return opt with
 		{
-			DisplayMode = RdpLauncher.RdpOptions.DisplayModeCustom,
 			UseMultiMon = UseMultiMon,
 			ColorDepth = SelectedColorDepth,
 			ShowConnectionBar = ShowConnectionBar,
@@ -4462,7 +4450,9 @@ public partial class MainViewModel
 			DisableThemes = DisableThemes,
 			BitmapCachePersist = BitmapCachePersist,
 			AutoReconnect = AutoReconnect,
-			AuthLevel = SelectedAuthLevel
+			AuthLevel = SelectedAuthLevel,
+			ConnectionType = SelectedConnectionType,
+			UseWebAuth = UseWebAuth
 		};
 	}
 

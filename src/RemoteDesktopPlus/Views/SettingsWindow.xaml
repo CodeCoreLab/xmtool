@@ -193,10 +193,10 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="关闭按钮最小化到托盘" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="点击关闭时隐藏到系统托盘" />
+                      <TextBlock Style="{StaticResource RowTitle}" Text="多显示器" />
+                      <TextBlock Style="{StaticResource RowDesc}" Text="将所有监视器用于远程会话" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding CloseToTray}" VerticalAlignment="Center" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding UseMultiMon}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -205,10 +205,10 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="最小化到托盘" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="最小化时隐藏到系统托盘" />
+                      <TextBlock Style="{StaticResource RowTitle}" Text="颜色深度" />
+                      <TextBlock Style="{StaticResource RowDesc}" Text="选择远程会话的颜色深度" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding MinimizeToTray}" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="180" ItemsSource="{Binding ColorDepthOptions}" SelectedItem="{Binding SelectedColorDepthDisplay}" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -217,34 +217,10 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="Esc 隐藏到托盘" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="按 Esc 键时隐藏窗口" />
+                      <TextBlock Style="{StaticResource RowTitle}" Text="全屏连接栏" />
+                      <TextBlock Style="{StaticResource RowDesc}" Text="全屏显示时在顶部显示连接栏" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding EscToTray}" VerticalAlignment="Center" />
-                  </Grid>
-                  <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
-                  <Grid Style="{StaticResource SettingRow}">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="窗口置顶" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="保持窗口始终在最前" />
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding Topmost}" VerticalAlignment="Center" />
-                  </Grid>
-                  <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
-                  <Grid Style="{StaticResource SettingRow}">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="开机自启（静默到托盘）" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="系统启动时自动运行并最小化到托盘" />
-                    </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding AutoStart}" VerticalAlignment="Center" ToolTip="通过 Windows 计划任务实现（最高权限，无 UAC 弹窗）。若已设置启动密码，开机拉起后仍需输入密码解锁。" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowConnectionBar}" VerticalAlignment="Center" />
                   </Grid>
                 </StackPanel>
               </Border>
@@ -265,7 +241,7 @@
                 </Border>
                 <StackPanel Grid.Column="1" Margin="16,0,0,0" VerticalAlignment="Center">
                   <TextBlock Text="显示配置" FontSize="19" FontWeight="Bold" Foreground="{StaticResource InkBrush}" />
-                  <TextBlock Text="远程桌面大小与颜色深度" FontSize="11.5" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
+                  <TextBlock Text="远程桌面大小与颜色深度（发起连接时写入 .rdp）" FontSize="11.5" Foreground="{StaticResource InkMutedBrush}" Margin="0,3,0,0" />
                 </StackPanel>
               </Grid>
               <Border Style="{StaticResource ShadowCard}" Padding="0,4">
@@ -276,25 +252,10 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                      <TextBlock Style="{StaticResource RowTitle}" Text="显示模式" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="性能预设按「流畅优先」整组调优；自定义时逐键生效" />
-                    </StackPanel>
-                    <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
-                      <RadioButton Content="性能预设" GroupName="DisplayMode" IsChecked="{Binding IsPerformancePreset}" VerticalAlignment="Center" />
-                      <RadioButton Content="自定义" GroupName="DisplayMode" IsChecked="{Binding IsCustomDisplay, Mode=OneWay}" Margin="18,0,0,0" VerticalAlignment="Center" />
-                    </StackPanel>
-                  </Grid>
-                  <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
-                  <Grid Style="{StaticResource SettingRow}">
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="*" />
-                      <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock Style="{StaticResource RowTitle}" Text="多显示器" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="将所有监视器用于远程会话" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding UseMultiMon}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding UseMultiMon}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -306,7 +267,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="颜色深度" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="选择远程会话的颜色深度" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="180" ItemsSource="{Binding ColorDepthOptions}" SelectedItem="{Binding SelectedColorDepthDisplay}" IsEnabled="{Binding IsCustomDisplay}" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="180" ItemsSource="{Binding ColorDepthOptions}" SelectedItem="{Binding SelectedColorDepthDisplay}" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -318,13 +279,14 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="全屏连接栏" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="全屏显示时在顶部显示连接栏" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowConnectionBar}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowConnectionBar}" VerticalAlignment="Center" />
                   </Grid>
                 </StackPanel>
               </Border>
             </StackPanel>
           </ScrollViewer>
         </TabItem>
+
         <!-- ─── 页 3：本地资源 ─── -->
         <TabItem Header="本地资源">
           <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -353,7 +315,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="远程音频" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="配置远程音频播放位置" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" ItemsSource="{Binding AudioModeOptions}" SelectedItem="{Binding SelectedAudioModeDisplay}" IsEnabled="{Binding IsCustomDisplay}" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" ItemsSource="{Binding AudioModeOptions}" SelectedItem="{Binding SelectedAudioModeDisplay}" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -365,7 +327,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="键盘组合键" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="应用 Windows 组合键的位置" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" ItemsSource="{Binding KeyboardHookOptions}" SelectedItem="{Binding SelectedKeyboardHookDisplay}" IsEnabled="{Binding IsCustomDisplay}" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" ItemsSource="{Binding KeyboardHookOptions}" SelectedItem="{Binding SelectedKeyboardHookDisplay}" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -377,7 +339,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="打印机重定向" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="在远程会话中使用本地打印机" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding RedirectPrinters}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding RedirectPrinters}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -422,9 +384,9 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                       <TextBlock Style="{StaticResource RowTitle}" Text="连接速度" />
-                      <TextBlock Style="{StaticResource RowDesc}" Text="选择连接速度来优化性能（自定义档生效）" />
+                      <TextBlock Style="{StaticResource RowDesc}" Text="选择连接速度来优化性能" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="220" ItemsSource="{Binding ConnectionTypeOptions}" SelectedItem="{Binding SelectedConnectionTypeDisplay}" IsEnabled="{Binding IsCustomDisplay}" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="220" ItemsSource="{Binding ConnectionTypeOptions}" SelectedItem="{Binding SelectedConnectionTypeDisplay}" />
                   </Grid>
                 </StackPanel>
               </Border>
@@ -437,7 +399,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="桌面背景" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowWallpaperDisplay}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowWallpaperDisplay}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -446,7 +408,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="字体平滑" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding AllowFontSmoothing}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding AllowFontSmoothing}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -455,7 +417,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="桌面合成" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding AllowDesktopComposition}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding AllowDesktopComposition}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -464,7 +426,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="拖动时显示窗口内容" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowWindowDragDisplay}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowWindowDragDisplay}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -473,7 +435,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="菜单和窗口动画" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowMenuAnimsDisplay}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowMenuAnimsDisplay}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -482,7 +444,7 @@
                       <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" Style="{StaticResource RowTitle}" Text="视觉样式" VerticalAlignment="Center" />
-                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowThemesDisplay}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding ShowThemesDisplay}" VerticalAlignment="Center" />
                   </Grid>
                 </StackPanel>
               </Border>
@@ -497,7 +459,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="持久位图缓存" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="缓存位图以提升重复画面性能" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding BitmapCachePersist}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding BitmapCachePersist}" VerticalAlignment="Center" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
@@ -509,7 +471,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="自动重新连接" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="连接中断时自动重新连接" />
                     </StackPanel>
-                    <CheckBox Grid.Column="1" IsChecked="{Binding AutoReconnect}" VerticalAlignment="Center" IsEnabled="{Binding IsCustomDisplay}" />
+                    <CheckBox Grid.Column="1" IsChecked="{Binding AutoReconnect}" VerticalAlignment="Center" />
                   </Grid>
                 </StackPanel>
               </Border>
@@ -544,7 +506,7 @@
                       <TextBlock Style="{StaticResource RowTitle}" Text="身份验证失败时" />
                       <TextBlock Style="{StaticResource RowDesc}" Text="服务器身份验证策略" />
                     </StackPanel>
-                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="220" ItemsSource="{Binding AuthLevelOptions}" SelectedItem="{Binding SelectedAuthLevelDisplay}" IsEnabled="{Binding IsCustomDisplay}" />
+                    <ComboBox Grid.Column="1" Style="{StaticResource RowCombo}" Width="220" ItemsSource="{Binding AuthLevelOptions}" SelectedItem="{Binding SelectedAuthLevelDisplay}" />
                   </Grid>
                   <Separator Background="{StaticResource HairlineBrush}" Margin="24,0" />
                   <Grid Style="{StaticResource SettingRow}">
