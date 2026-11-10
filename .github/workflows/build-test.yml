@@ -1,0 +1,45 @@
+name: Build and Test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore
+        run: dotnet restore src/RemoteDesktopPlus/RemoteDesktopPlus.csproj
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+      # 注：不用 --locked-mode。ILLink.Tasks 由 SDK 按条件隐式注入（带 -r publish 的环境
+      # 会写进锁文件），跨环境锁不一致会报 NU1004 —— 锁文件仅作可复现性参考。
+
+      - name: Build (main app)
+        run: dotnet build src/RemoteDesktopPlus/RemoteDesktopPlus.csproj -c Release --no-restore --nologo
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: Test (202 facts, WPF STA compatible)
+        run: dotnet test src/RemoteDesktopPlus/tests/RemoteDesktopPlus.Tests/RemoteDesktopPlus.Tests.csproj -c Release --no-build --nologo --logger "trx;LogFileName=result.trx"
+
+      - name: Upload test results (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: '**/result.trx'
+          if-no-files-found: ignore
