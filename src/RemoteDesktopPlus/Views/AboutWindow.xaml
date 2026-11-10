@@ -38,7 +38,7 @@
           <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
         <TextBlock Grid.Row="0" Grid.Column="0" Text="版本" Style="{StaticResource FieldLabel}" />
-        <TextBlock Grid.Row="0" Grid.Column="1" Text="v2.0.0" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
+        <TextBlock Grid.Row="0" Grid.Column="1" Name="VersionText" Text="v0.0.0" FontFamily="{StaticResource MonoFont}" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="2" Grid.Column="0" Text="技术" Style="{StaticResource FieldLabel}" />
         <TextBlock Grid.Row="2" Grid.Column="1" Text=".NET 10 · WPF" Foreground="{StaticResource InkBrush}" VerticalAlignment="Center" />
         <TextBlock Grid.Row="4" Grid.Column="0" Text="作者" Style="{StaticResource FieldLabel}" />

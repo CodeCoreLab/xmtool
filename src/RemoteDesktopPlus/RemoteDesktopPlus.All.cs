@@ -370,6 +370,50 @@ public static class SettingKeys
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// 追加区段：RemoteDesktopPlus.Services/AppVersion.cs  →  namespace RemoteDesktopPlus.Services
+// ════════════════════════════════════════════════════════════════════════
+namespace RemoteDesktopPlus.Services
+{
+using System;
+using System.Reflection;
+
+/// <summary>
+/// 应用版本的唯一来源：读 <c>Properties/AssemblyInfo.cs</c> 的
+/// <c>AssemblyInformationalVersion</c>。设置窗口页脚与关于窗口都从这里取，
+/// 不在 XAML 里硬编码 —— 否则两处版本号必然漂移。
+/// </summary>
+public static class AppVersion
+{
+	/// <summary>形如 <c>2.0.1</c>；读不到时返回 <c>0.0.0</c> 而不是抛异常。</summary>
+	public static string Current { get; } = Resolve();
+
+	private static string Resolve()
+	{
+		try
+		{
+			string? informational = Assembly.GetEntryAssembly()
+				?.GetCustomAttribute<AssemblyInformationalVersionAttribute>()
+				?.InformationalVersion;
+			if (!string.IsNullOrWhiteSpace(informational))
+			{
+				// 去掉 SourceLink 追加的 "+<commit>" 后缀，只留语义化版本。
+				int plus = informational.IndexOf('+');
+				return plus > 0 ? informational.Substring(0, plus) : informational;
+			}
+			// 回落：用 AssemblyVersion。刻意不读 FileVersionInfo(asm.Location) ——
+			// 单文件发布下 Assembly.Location 为空（IL3000），那条路径在真实产物里永远走不通。
+			Version? asmVersion = Assembly.GetEntryAssembly()?.GetName().Version;
+			return asmVersion == null ? "0.0.0" : $"{asmVersion.Major}.{asmVersion.Minor}.{asmVersion.Build}";
+		}
+		catch
+		{
+			return "0.0.0";
+		}
+	}
+}
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // 区段 06 / 39：RemoteDesktopPlus.Services/Log.cs  →  namespace RemoteDesktopPlus.Services
 // ════════════════════════════════════════════════════════════════════════
 namespace RemoteDesktopPlus.Services
@@ -2194,8 +2238,31 @@ public static class RdpLauncher
 	/// 要重定向的盘符。传 <see cref="AllDrivesToken"/> 表示全部驱动器（含连接后接入的）；
 	/// 传单个字母（如 "D"）表示只重定向该盘。
 	/// </param>
-	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true)
+	public sealed record RdpOptions(string Host, int Port, string UserName, string Password, int? Width, int? Height, bool RedirectLocalDrive, string LocalDriveLetter, bool ForceConsole, bool RedirectClipboard = true,
+		// —— v2.1.1 追加：设置页签（mstsc 原生项）的高级项。全部带默认值，
+		//    既有调用点零改动。DisplayMode 两档互斥：预设档走 BuildRdpContent 的
+		//    原有键组，自定义档按下方单项逐键写出（二者不同时生效）。 ——
+		int DisplayMode = 0,
+		bool UseMultiMon = false,
+		int ColorDepth = 32,
+		bool ShowConnectionBar = true,
+		int AudioMode = 0,
+		int KeyboardHook = 2,
+		bool RedirectPrinters = false,
+		bool DisableWallpaper = false,
+		bool AllowFontSmoothing = true,
+		bool AllowDesktopComposition = true,
+		bool DisableFullWindowDrag = false,
+		bool DisableMenuAnims = false,
+		bool DisableThemes = false,
+		bool BitmapCachePersist = true,
+		bool AutoReconnect = true,
+		int AuthLevel = 0)
 	{
+		/// <summary>显示模式（v2.1.1）：0=性能预设，1=自定义 —— 自定义时按单项开关逐键写出。</summary>
+		public const int DisplayModePreset = 0;
+
+		public const int DisplayModeCustom = 1;
 		/// <summary>
 		/// 「全部驱动器」的协议取值。Microsoft RDP 属性规范中，drivestoredirect 支持
 		/// `*`（全部，含之后接入的）与 `DynamicDrives`（仅之后接入的）；此处用 `*`，
@@ -2450,6 +2517,27 @@ public static class RdpLauncher
 		if (opt.ForceConsole)
 		{
 			sb.AppendLine("connect to console:i:1");
+		}
+
+		// —— v2.1.1：设置页签「自定义」档的 mstsc 原生键。预设档完全跳过，
+		//    与预设档键组互斥（二者不同时生效，写入源只有本方法一处）。 ——
+		if (opt.DisplayMode == RdpOptions.DisplayModeCustom)
+		{
+			sb.AppendLine($"use multimon:i:{(opt.UseMultiMon ? 1 : 0)}");
+			sb.AppendLine($"session bpp:i:{opt.ColorDepth}");
+			sb.AppendLine($"displayconnectionbar:i:{(opt.ShowConnectionBar ? 1 : 0)}");
+			sb.AppendLine($"audiomode:i:{opt.AudioMode}");
+			sb.AppendLine($"keyboardhook:i:{opt.KeyboardHook}");
+			sb.AppendLine($"redirectprinters:i:{(opt.RedirectPrinters ? 1 : 0)}");
+			sb.AppendLine($"disable wallpaper:i:{(opt.DisableWallpaper ? 1 : 0)}");
+			sb.AppendLine($"allow font smoothing:i:{(opt.AllowFontSmoothing ? 1 : 0)}");
+			sb.AppendLine($"allow desktop composition:i:{(opt.AllowDesktopComposition ? 1 : 0)}");
+			sb.AppendLine($"disable full window drag:i:{(opt.DisableFullWindowDrag ? 1 : 0)}");
+			sb.AppendLine($"disable menu anims:i:{(opt.DisableMenuAnims ? 1 : 0)}");
+			sb.AppendLine($"disable themes:i:{(opt.DisableThemes ? 1 : 0)}");
+			sb.AppendLine($"bitmapcachepersistenable:i:{(opt.BitmapCachePersist ? 1 : 0)}");
+			sb.AppendLine($"autoreconnection enabled:i:{(opt.AutoReconnect ? 1 : 0)}");
+			sb.AppendLine($"authentication level:i:{opt.AuthLevel}");
 		}
 		return sb.ToString();
 	}
@@ -3480,6 +3568,93 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 	[ObservableProperty]
 	private bool topmost;
 
+	// —— v2.1.1：设置页签（mstsc 原生项）单项选项。自定义档生效（DisplayModeCustom），
+	//    预设档时 UI 整体禁用。持久化为单键 JSON（CustomDisplayState），见 SaveCustomDisplayOptions。 ——
+	[ObservableProperty]
+	private bool useMultiMon;
+
+	[ObservableProperty]
+	private int selectedColorDepth = 32;
+
+	[ObservableProperty]
+	private bool showConnectionBar = true;
+
+	[ObservableProperty]
+	private int selectedAudioMode;
+
+	[ObservableProperty]
+	private int selectedKeyboardHook = 2;
+
+	[ObservableProperty]
+	private bool redirectPrinters;
+
+	[ObservableProperty]
+	private bool disableWallpaper;
+
+	[ObservableProperty]
+	private bool allowFontSmoothing = true;
+
+	[ObservableProperty]
+	private bool allowDesktopComposition = true;
+
+	[ObservableProperty]
+	private bool disableFullWindowDrag;
+
+	[ObservableProperty]
+	private bool disableMenuAnims;
+
+	[ObservableProperty]
+	private bool disableThemes;
+
+	[ObservableProperty]
+	private bool bitmapCachePersist = true;
+
+	[ObservableProperty]
+	private bool autoReconnect = true;
+
+	[ObservableProperty]
+	private int selectedAuthLevel;
+
+	/// <summary>显示模式：true=性能预设（默认），false=自定义。双 Radio 绑定用。</summary>
+	[ObservableProperty]
+	private bool isPerformancePreset = true;
+
+	/// <summary>IsPerformancePreset 的反转视图（自定义 Radio 绑定）。</summary>
+	public bool IsCustomDisplay => !IsPerformancePreset;
+
+	// —— v2.1.1：设置页签下拉候选（与 mstsc 原生项对齐）。string[] 形态绑定 ComboBox。 ——
+	public IReadOnlyList<string> ColorDepthOptions { get; } = new string[] { "15 位", "16 位", "24 位", "32 位" };
+
+	/// <summary>色深下拉显示值 → .rdp session bpp 数值。</summary>
+	public static int ParseColorDepth(string display)
+	{
+		return display switch
+		{
+			"15 位" => 15,
+			"16 位" => 16,
+			"24 位" => 24,
+			_ => 32
+		};
+	}
+
+	/// <summary>session bpp 数值 → 下拉显示值（回读用）。</summary>
+	public static string ColorDepthDisplay(int bpp)
+	{
+		return bpp switch
+		{
+			15 => "15 位",
+			16 => "16 位",
+			24 => "24 位",
+			_ => "32 位"
+		};
+	}
+
+	public IReadOnlyList<string> AudioModeOptions { get; } = new string[] { "在此计算机上播放", "在远程计算机上播放", "不播放" };
+
+	public IReadOnlyList<string> KeyboardHookOptions { get; } = new string[] { "在本地计算机上", "在远程计算机上", "仅在全屏显示时" };
+
+	public IReadOnlyList<string> AuthLevelOptions { get; } = new string[] { "始终连接，即使身份验证失败", "不验证时不连接", "显示警告" };
+
 	[ObservableProperty]
 	private bool isRemoteEnabled;
 
@@ -3765,6 +3940,7 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 			{
 				Topmost = resultTop;
 			}
+			LoadCustomDisplayOptions();
 		}
 		finally
 		{
@@ -3865,6 +4041,213 @@ public partial class MainViewModel : ObservableObject, IDropTarget
 		_db.SetSetting(SettingKeys.OptionTopmost, value.ToString());
 		TopmostChanged?.Invoke(this, value);
 	}
+
+	// —— v2.1.1：设置页签「自定义档」单项集合的持久化。
+	//    单键 JSON 存取（一个键管一组低频项），避免 SettingKeys 膨胀；
+	//    写入时机 = 任一项变化，读回时机 = LoadOptions 尾部。 ——
+	private const string CustomDisplayOptionsKey = "options.custom_display";
+
+	/// <summary>色深下拉当前显示值（ComboBox SelectedItem 绑定用，int↔string 桥接）。</summary>
+	public string SelectedColorDepthDisplay
+	{
+		get => ColorDepthDisplay(SelectedColorDepth);
+		set => SelectedColorDepth = ParseColorDepth(value);
+	}
+
+	partial void OnSelectedColorDepthChanged(int value)
+	{
+		OnPropertyChanged(nameof(SelectedColorDepthDisplay));
+		SaveCustomDisplayOptions();
+	}
+
+	// —— v2.1.1：int 选项 → 显示桥接属性。BAML/ComboBox 的 SelectedItem 与
+	//    ItemsSource 必须同类型；原版用 int[] + StringFormat，WPF 里 int 项
+	//    与 string 显示混绑会静默失配（下拉显示空白）。桥接属性是根因修法：
+	//    get 把 int 翻成显示串，set 反向解析，持久化仍是 int。 ——
+	public string SelectedAudioModeDisplay
+	{
+		get => AudioModeOptions[Math.Min(SelectedAudioMode, AudioModeOptions.Count - 1)];
+		set => SelectedAudioMode = Math.Max(0, AudioModeOptions.ToList().IndexOf(value));
+	}
+
+	public string SelectedKeyboardHookDisplay
+	{
+		get => KeyboardHookOptions[Math.Min(SelectedKeyboardHook, KeyboardHookOptions.Count - 1)];
+		set => SelectedKeyboardHook = Math.Max(0, KeyboardHookOptions.ToList().IndexOf(value));
+	}
+
+	public string SelectedAuthLevelDisplay
+	{
+		get => AuthLevelOptions[Math.Min(SelectedAuthLevel, AuthLevelOptions.Count - 1)];
+		set => SelectedAuthLevel = Math.Max(0, AuthLevelOptions.ToList().IndexOf(value));
+	}
+
+	/// <summary>连接速度下拉（自定义档）。存储值沿用 mstsc 原生 0-7 档；默认 7=自动检测连接质量。</summary>
+	public IReadOnlyList<string> ConnectionTypeOptions { get; } = new string[]
+	{
+		"调制解调器 (56 Kbps)",
+		"低速宽带 (256 Kbps - 2 Mbps)",
+		"卫星 (2 Mbps - 16 Mbps, 高延迟)",
+		"高速宽带 (2 Mbps - 10 Mbps)",
+		"广域网 (10 Mbps 以上, 高延迟)",
+		"局域网 (10 Mbps 以上)",
+		"自动检测带宽",
+		"自动检测连接质量"
+	};
+
+	[ObservableProperty]
+	private int selectedConnectionType = 7;
+
+	partial void OnSelectedConnectionTypeChanged(int value) => SaveCustomDisplayOptions();
+
+	public string SelectedConnectionTypeDisplay
+	{
+		get => ConnectionTypeOptions[Math.Min(SelectedConnectionType, ConnectionTypeOptions.Count - 1)];
+		set => SelectedConnectionType = Math.Max(0, ConnectionTypeOptions.ToList().IndexOf(value));
+	}
+
+	// —— v2.1.1：视觉组正向显示桥接。原版 4 个开关直绑 Disable*（UI 开 = 禁用效果，
+	//    文案与语义相反，属原版 UX 缺陷）。此处 UI 恒为正向（开 = 显示效果），
+	//    get 取反、set 再取反写回 —— 与原版截图观感一致且语义正确。 ——
+	public bool ShowWallpaperDisplay
+	{
+		get => !DisableWallpaper;
+		set => DisableWallpaper = !value;
+	}
+
+	public bool ShowWindowDragDisplay
+	{
+		get => !DisableFullWindowDrag;
+		set => DisableFullWindowDrag = !value;
+	}
+
+	public bool ShowMenuAnimsDisplay
+	{
+		get => !DisableMenuAnims;
+		set => DisableMenuAnims = !value;
+	}
+
+	public bool ShowThemesDisplay
+	{
+		get => !DisableThemes;
+		set => DisableThemes = !value;
+	}
+
+	private void LoadCustomDisplayOptions()
+	{
+		try
+		{
+			string raw = _db.GetSetting(CustomDisplayOptionsKey);
+			if (string.IsNullOrEmpty(raw))
+			{
+				return;
+			}
+			CustomDisplayState? loaded = null;
+			try
+			{
+				loaded = System.Text.Json.JsonSerializer.Deserialize<CustomDisplayState>(raw);
+			}
+			catch (System.Text.Json.JsonException)
+			{
+				// 手改库/版本兼容：反序列化失败用默认值，不阻断启动。
+			}
+			if (loaded == null)
+			{
+				return;
+			}
+			IsPerformancePreset = loaded.IsPreset;
+			UseMultiMon = loaded.UseMultiMon;
+			SelectedColorDepth = loaded.ColorDepth;
+			ShowConnectionBar = loaded.ShowConnectionBar;
+			SelectedAudioMode = loaded.AudioMode;
+			SelectedKeyboardHook = loaded.KeyboardHook;
+			RedirectPrinters = loaded.RedirectPrinters;
+			DisableWallpaper = loaded.DisableWallpaper;
+			AllowFontSmoothing = loaded.AllowFontSmoothing;
+			AllowDesktopComposition = loaded.AllowDesktopComposition;
+			DisableFullWindowDrag = loaded.DisableFullWindowDrag;
+			DisableMenuAnims = loaded.DisableMenuAnims;
+			DisableThemes = loaded.DisableThemes;
+			BitmapCachePersist = loaded.BitmapCachePersist;
+			AutoReconnect = loaded.AutoReconnect;
+			SelectedAuthLevel = loaded.AuthLevel;
+		}
+		catch (Exception ex)
+		{
+			// 非 JSON 异常（IO 等）同样不阻断启动：保持字段默认值。
+			Log.Warn("自定义显示选项读回失败，使用默认值", ex);
+		}
+	}
+
+	private void SaveCustomDisplayOptions()
+	{
+		if (_suppressOptionSave)
+		{
+			return;
+		}
+		var state = new CustomDisplayState
+		{
+			IsPreset = IsPerformancePreset,
+			UseMultiMon = UseMultiMon,
+			ColorDepth = SelectedColorDepth,
+			ShowConnectionBar = ShowConnectionBar,
+			AudioMode = SelectedAudioMode,
+			KeyboardHook = SelectedKeyboardHook,
+			RedirectPrinters = RedirectPrinters,
+			DisableWallpaper = DisableWallpaper,
+			AllowFontSmoothing = AllowFontSmoothing,
+			AllowDesktopComposition = AllowDesktopComposition,
+			DisableFullWindowDrag = DisableFullWindowDrag,
+			DisableMenuAnims = DisableMenuAnims,
+			DisableThemes = DisableThemes,
+			BitmapCachePersist = BitmapCachePersist,
+			AutoReconnect = AutoReconnect,
+			AuthLevel = SelectedAuthLevel
+		};
+		_db.SetSetting(CustomDisplayOptionsKey, System.Text.Json.JsonSerializer.Serialize(state));
+	}
+
+	/// <summary>自定义显示选项的持久化快照（单键 JSON）。</summary>
+	private sealed class CustomDisplayState
+	{
+		public bool IsPreset { get; set; } = true;
+		public bool UseMultiMon { get; set; }
+		public int ColorDepth { get; set; } = 32;
+		public bool ShowConnectionBar { get; set; } = true;
+		public int AudioMode { get; set; }
+		public int KeyboardHook { get; set; } = 2;
+		public bool RedirectPrinters { get; set; }
+		public bool DisableWallpaper { get; set; }
+		public bool AllowFontSmoothing { get; set; } = true;
+		public bool AllowDesktopComposition { get; set; } = true;
+		public bool DisableFullWindowDrag { get; set; }
+		public bool DisableMenuAnims { get; set; }
+		public bool DisableThemes { get; set; }
+		public bool BitmapCachePersist { get; set; } = true;
+		public bool AutoReconnect { get; set; } = true;
+		public int AuthLevel { get; set; }
+	}
+
+	partial void OnIsPerformancePresetChanged(bool value)
+	{
+		OnPropertyChanged(nameof(IsCustomDisplay));
+		SaveCustomDisplayOptions();
+	}
+
+	partial void OnUseMultiMonChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnShowConnectionBarChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnSelectedAudioModeChanged(int value) => SaveCustomDisplayOptions();
+	partial void OnSelectedKeyboardHookChanged(int value) => SaveCustomDisplayOptions();
+	partial void OnRedirectPrintersChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnDisableWallpaperChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnAllowFontSmoothingChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnAllowDesktopCompositionChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnDisableFullWindowDragChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnDisableMenuAnimsChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnDisableThemesChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnBitmapCachePersistChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnAutoReconnectChanged(bool value) => SaveCustomDisplayOptions();
+	partial void OnSelectedAuthLevelChanged(int value) => SaveCustomDisplayOptions();
 
 	/// <summary>
 	/// 把「1920*1080」「1280x720」「全屏」解析为像素尺寸。
@@ -4038,7 +4421,7 @@ public partial class MainViewModel
 		string driveSpec = group?.LocalDriveLetter ?? LocalDriveLetter;
 
 		var (width, height) = ParseResolution(resolution);
-		return new RdpLauncher.RdpOptions(
+		return WithCustomDisplayArgs(new RdpLauncher.RdpOptions(
 			item.Host,
 			item.Port,
 			item.UserName,
@@ -4048,7 +4431,39 @@ public partial class MainViewModel
 			redirectDrive,
 			ToDriveSpec(driveSpec),
 			ForceConsole,
-			redirectClipboard);
+			redirectClipboard));
+	}
+
+	/// <summary>
+	/// 把设置页签的自定义档选项合并进 RdpOptions（v2.1.1）。
+	/// 预设档原样返回；自定义档用 with 覆盖 DisplayMode 与各单项。
+	/// 唯一合并入口，保证两档互斥语义只在一处实现。
+	/// </summary>
+	private RdpLauncher.RdpOptions WithCustomDisplayArgs(RdpLauncher.RdpOptions opt)
+	{
+		if (IsPerformancePreset)
+		{
+			return opt;
+		}
+		return opt with
+		{
+			DisplayMode = RdpLauncher.RdpOptions.DisplayModeCustom,
+			UseMultiMon = UseMultiMon,
+			ColorDepth = SelectedColorDepth,
+			ShowConnectionBar = ShowConnectionBar,
+			AudioMode = SelectedAudioMode,
+			KeyboardHook = SelectedKeyboardHook,
+			RedirectPrinters = RedirectPrinters,
+			DisableWallpaper = DisableWallpaper,
+			AllowFontSmoothing = AllowFontSmoothing,
+			AllowDesktopComposition = AllowDesktopComposition,
+			DisableFullWindowDrag = DisableFullWindowDrag,
+			DisableMenuAnims = DisableMenuAnims,
+			DisableThemes = DisableThemes,
+			BitmapCachePersist = BitmapCachePersist,
+			AutoReconnect = AutoReconnect,
+			AuthLevel = SelectedAuthLevel
+		};
 	}
 
 	public void ConnectItem(ConnectionItem item)
@@ -4315,7 +4730,7 @@ public partial class MainViewModel
 			return;
 		}
 		var (width, height) = ParseResolution(Resolution);
-		_launcher.Launch(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard));
+		_launcher.Launch(WithCustomDisplayArgs(new RdpLauncher.RdpOptions(Host, Port, UserName, Password, width, height, RedirectLocalDrive, ToDriveSpec(LocalDriveLetter), ForceConsole, RedirectClipboard)));
 	}
 
 	private bool CanConnect()
@@ -4636,6 +5051,7 @@ public partial class MainViewModel
 namespace RemoteDesktopPlus.Views
 {
 using System.Windows;
+using RemoteDesktopPlus.Services;
 
 /// <summary>
 /// 关于窗口。视图结构见 Views/AboutWindow.xaml。
@@ -4645,6 +5061,8 @@ public partial class AboutWindow : Window
 	public AboutWindow()
 	{
 		InitializeComponent();
+		// 版本唯一真相源（v2.1.1）：不再在 XAML 硬编码，随程序集信息自动更新。
+		VersionText.Text = "v" + AppVersion.Current;
 	}
 
 	private void Ok_Click(object sender, RoutedEventArgs e)
@@ -5141,7 +5559,21 @@ public partial class SettingsWindow : Window
 			{
 				DataContext = Owner.DataContext;
 			}
+			// 页脚版本号（v2.1.1）：AppVersion 是唯一真相源，不在 XAML 硬编码。
+			FooterVersion.Text = "v" + RemoteDesktopPlus.Services.AppVersion.Current;
 		};
+	}
+
+	/// <summary>左侧导航 → 右侧页面切换。TabControl 的 SelectedIndex 与 NavList 双向绑定，
+	/// 此处仅为保持与原版事件语义一致（选中即切换）；实际同步由绑定完成。</summary>
+	private void NavList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+	{
+		// 绑定已双向同步（NavTabs.SelectedIndex = NavList.SelectedIndex），无额外动作。
+	}
+
+	private void Close_Click(object sender, RoutedEventArgs e)
+	{
+		Close();
 	}
 }
 }
