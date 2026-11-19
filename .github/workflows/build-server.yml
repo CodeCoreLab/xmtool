@@ -1,0 +1,69 @@
+name: Server Build and Test
+
+# 枢联 B′ M1：Server 服务化工程 CI（选型方案 v1.1 §3.5，M4 时并入三架构 Release）
+# 本 job 只验 Server 工程（net8.0）；WPF 版（net10.0-windows）由 build-test.yml 负责，
+# 两工程同仓不同 CI，互不影响（验收 #4：WPF 版零影响）。
+
+on:
+  push:
+    branches: [master, "feat/**"]
+    paths:
+      - "src/RemoteDesktopPlus/Server/**"
+      - "src/RemoteDesktopPlus/RemoteDesktopPlus.All.cs"
+      - ".github/workflows/build-server.yml"
+  workflow_dispatch:
+
+jobs:
+  server-build:
+    name: server (net8.0, win-x64)
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/RemoteDesktopPlus/Server/RemoteDesktopPlus.Server.csproj
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: Build
+        run: dotnet build src/RemoteDesktopPlus/Server/RemoteDesktopPlus.Server.csproj -c Release --no-restore --nologo
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: 冒烟（healthz + 回环绑定断言）
+        shell: pwsh
+        run: |
+          $proc = Start-Process dotnet -ArgumentList "run","--project","src/RemoteDesktopPlus/Server/RemoteDesktopPlus.Server.csproj","--no-build","-c","Release" -PassThru -WindowStyle Hidden
+          try {
+            $ok = $false
+            for ($i=0; $i -lt 20; $i++) {
+              Start-Sleep -Milliseconds 800
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:18888/healthz" -UseBasicParsing -TimeoutSec 3
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) { Write-Error "healthz 探活失败"; exit 1 }
+            Write-Host "healthz 200 OK"
+            $panel = Invoke-WebRequest -Uri "http://127.0.0.1:18888/" -UseBasicParsing -TimeoutSec 3
+            if ($panel.StatusCode -ne 200) { Write-Error "面板非 200"; exit 1 }
+            Write-Host "面板 200 OK"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      # 零 WPF 引用断言（验收 #2）：平移切片内不得出现 WPF 类型
+      - name: 零 System.Windows 断言
+        shell: pwsh
+        run: |
+          $hits = Select-String -Path "src/RemoteDesktopPlus/Server/Shared/All.Services.cs" -Pattern "System\.Windows" | Where-Object { $_.Line -notmatch '^\s*//' -and $_.Line -notmatch '///' }
+          if ($hits) { $hits | ForEach-Object { Write-Host $_.Line }; Write-Error "平移切片含 WPF 引用"; exit 1 }
+          Write-Host "零 System.Windows 引用 ✓"
