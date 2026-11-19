@@ -46,9 +46,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 关闭默认编译项后显式列出：入口 + 全量切片（S01-S17 + S19-S23 VM 层，WPF 5 处摘除） -->
+    <!-- 关闭默认编译项后显式列出：入口 + 全量切片（S01-S17 + S19-S23 VM 层，WPF 8 处摘除）+ API 层 -->
     <Compile Include="Program.cs" />
     <Compile Include="Shared/All.App.cs" />
+    <Compile Include="Api/**/*.cs" />
   </ItemGroup>
 
 </Project>

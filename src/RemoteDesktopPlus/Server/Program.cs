@@ -8,6 +8,11 @@ builder.Services.AddControllers();
 
 var app = builder.Build();
 
+// ── API 路由（M2：连接 CRUD/探活/拉起；M3：安全会话）
+global::RemoteDesktopPlus.Server.Api.ConnectionsApi.Map(app);
+global::RemoteDesktopPlus.Server.Api.ConnectApi.Map(app);
+global::RemoteDesktopPlus.Server.Api.SecurityApi.Map(app);
+
 // ── 健康端点（形态 A 标准件：liveness 轻量 200）
 app.MapGet("/healthz", () => Results.Ok(new { status = "alive", ts = DateTime.UtcNow }));
 
