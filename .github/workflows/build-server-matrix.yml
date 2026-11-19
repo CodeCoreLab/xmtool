@@ -92,11 +92,13 @@ jobs:
             Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
           }
 
-      - name: 上传产物
+      - name: 上传产物（exe + wwwroot 静态资源随件）
         uses: actions/upload-artifact@v4
         with:
           name: shulian-server-${{ matrix.rid }}
-          path: publish/${{ matrix.rid }}/${{ matrix.exe }}
+          path: |
+            publish/${{ matrix.rid }}/${{ matrix.exe }}
+            src/RemoteDesktopPlus/Server/wwwroot/**
           if-no-files-found: error
 
   release:
@@ -119,10 +121,13 @@ jobs:
           VER="${GITHUB_REF_NAME##*/}"   # 分支名含 / 只取尾段（prompt-forge 实证坑）
           mkdir -p rel
           for d in dist/shulian-server-*/; do
-            rid=$(basename "$d")
-            f=$(ls "$d" | head -1)
+            rid=$(basename "$d" | sed 's/^shulian-server-//')
+            f=$(ls "$d" | grep -v wwwroot | head -1)
             cp "$d/$f" "rel/shulian-server-${VER}-${rid}"
           done
+          # wwwroot 一次性打包（三架构共用同一静态资源）
+          cp -r src/RemoteDesktopPlus/Server/wwwroot rel/wwwroot
+          tar -czf rel/shulian-server-${VER}-wwwroot.tar.gz -C rel wwwroot && rm -rf rel/wwwroot
           ls -lh rel/
 
       - name: 发布到 Release
