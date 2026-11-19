@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    枢联 B′ M1 第二步：Server 测试工程（平移自 tests/RemoteDesktopPlus.Tests）
+    平移策略（清单 §4）：
+      - Services/Models/纯逻辑测试 → 原样平移（引用改共享切片）
+      - VM 行为测试（MainViewModelTests/ConnectionEnhancementsTests 等）→ 原样平移
+        （MainViewModel 类在切片内齐全，FakeDialogService 也零 WPF；实测 STA 标记
+         grep 为 0，EditConnectionWindow 仅出现在注释——可原样跑）
+      - MstscWindowManagerTests / RdpLauncherTests / ParseResolutionTests → 纯逻辑，原样
+      - StubDropInfo（4 个 WPF using + DropInfo 模拟）→ WPF 专属，排除并记录
+      - 引用方式：Compile Include 共享切片 + 被测测试文件平移，与主工程同一 All.Services.cs
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>RemoteDesktopPlus.Server.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\RemoteDesktopPlus.Server.csproj" />
+    <!-- 被测源 = 同一份机械切片（主工程已含，这里不需重复；引用主工程即可） -->
+  </ItemGroup>
+
+</Project>

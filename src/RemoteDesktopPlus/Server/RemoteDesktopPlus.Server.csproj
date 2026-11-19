@@ -24,6 +24,10 @@
     <InvariantGlobalization>false</InvariantGlobalization>
     <!-- self-contained 单文件（M4 CI 三架构），开发期默认 framework-dependent -->
     <SelfContained Condition="'$(RuntimeIdentifier)' != ''">true</SelfContained>
+    <!-- 测试工程以 Compile Include 方式复用本工程源码（同一程序集两用途），
+         必须关掉主工程的自动 obj 生成物，否则 AssemblyInfo 双份冲突 -->
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
   </PropertyGroup>
 
   <ItemGroup>
@@ -42,8 +46,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 机械切片：S01-S17（Models + Services），generate.py 生成 -->
-    <Compile Include="Shared/All.Services.cs" />
+    <!-- 关闭默认编译项后显式列出：入口 + 全量切片（S01-S17 + S19-S23 VM 层，WPF 5 处摘除） -->
+    <Compile Include="Program.cs" />
+    <Compile Include="Shared/All.App.cs" />
   </ItemGroup>
 
 </Project>
