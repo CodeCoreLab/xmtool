@@ -1,0 +1,134 @@
+name: Server Build Matrix
+
+# 枢联 B′ M4：三架构构建 + 产物归集（win-x64 / linux-x64 / linux-arm64）
+# self-contained 单文件（.NET 8 runtime 内嵌，免麒麟 .NET 源问题，选型 R2 缓解）
+# linux-arm64 在 GitHub arm 原生 runner 编译（免 qemu）；产物挂 Release（内网 gh-proxy 唯一下载通道）
+# 冒烟策略：win-x64 原生 healthz；linux 双架构产物 ELF 断言（真机/qemu 冒烟走 xmtooldev 预验层）
+
+on:
+  push:
+    branches: [master, "feat/**"]
+    paths:
+      - "src/RemoteDesktopPlus/Server/**"
+      - "src/RemoteDesktopPlus/RemoteDesktopPlus.All.cs"
+      - ".github/workflows/build-server*.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: ${{ matrix.rid }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - rid: win-x64
+            runner: windows-latest
+            exe: RemoteDesktopPlus.Server.exe
+          - rid: linux-x64
+            runner: ubuntu-latest
+            exe: RemoteDesktopPlus.Server
+          - rid: linux-arm64
+            runner: ubuntu-24.04-arm
+            exe: RemoteDesktopPlus.Server
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore src/RemoteDesktopPlus/Server/RemoteDesktopPlus.Server.csproj -r ${{ matrix.rid }}
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: Publish（self-contained 单文件）
+        run: >
+          dotnet publish src/RemoteDesktopPlus/Server/RemoteDesktopPlus.Server.csproj
+          -c Release -r ${{ matrix.rid }} --self-contained true
+          -p:PublishSingleFile=true -p:PublishTrimmed=false
+          -o publish/${{ matrix.rid }} --nologo
+        env:
+          DOTNET_CLI_TELEMETRY_OPTOUT: 1
+
+      - name: 产物校验
+        shell: bash
+        run: |
+          BIN=publish/${{ matrix.rid }}/${{ matrix.exe }}
+          test -f "$BIN" || { echo "产物缺失: $BIN"; exit 1; }
+          ls -lh "$BIN"
+          # linux 产物 ELF 架构断言（win 上无 readelf，跳过——windows runner 有 git bash 但无 binutils）
+          if [[ "${{ matrix.rid }}" == linux-* ]]; then
+            readelf -h "$BIN" | grep -E "Class|Machine"
+            if [[ "${{ matrix.rid }}" == "linux-arm64" ]]; then
+              readelf -h "$BIN" | grep -q "AArch64" || { echo "架构断言失败: 应为 AArch64"; exit 1; }
+            else
+              readelf -h "$BIN" | grep -q "X86-64" || { echo "架构断言失败: 应为 X86-64"; exit 1; }
+            fi
+          fi
+
+      - name: 冒烟（仅 win-x64 可原生跑）
+        if: matrix.rid == 'win-x64'
+        shell: pwsh
+        run: |
+          $proc = Start-Process "publish/win-x64/RemoteDesktopPlus.Server.exe" -PassThru -WindowStyle Hidden
+          try {
+            $ok = $false
+            for ($i=0; $i -lt 20; $i++) {
+              Start-Sleep -Milliseconds 800
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:18888/healthz" -UseBasicParsing -TimeoutSec 3
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+            }
+            if (-not $ok) { Write-Error "healthz 探活失败"; exit 1 }
+            Write-Host "healthz 200 OK（单文件产物）"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+
+      - name: 上传产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: shulian-server-${{ matrix.rid }}
+          path: publish/${{ matrix.rid }}/${{ matrix.exe }}
+          if-no-files-found: error
+
+  release:
+    name: release（三架构归集）
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: write   # GITHUB_TOKEN 默认只读，建 Release 必须显式开（prompt-forge 实证）
+    steps:
+      - name: 下载三架构产物
+        uses: actions/download-artifact@v4
+        with:
+          pattern: shulian-server-*
+          merge-multiple: false
+          path: dist
+
+      - name: 整理命名（分支尾段 + RID）
+        run: |
+          VER="${GITHUB_REF_NAME##*/}"   # 分支名含 / 只取尾段（prompt-forge 实证坑）
+          mkdir -p rel
+          for d in dist/shulian-server-*/; do
+            rid=$(basename "$d")
+            f=$(ls "$d" | head -1)
+            cp "$d/$f" "rel/shulian-server-${VER}-${rid}"
+          done
+          ls -lh rel/
+
+      - name: 发布到 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: bprime-${{ github.run_id }}
+          name: 枢联 B′ 构建 ${{ github.ref_name }}
+          files: rel/shulian-server-*
+          prerelease: true
