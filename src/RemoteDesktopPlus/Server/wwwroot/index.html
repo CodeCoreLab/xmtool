@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枢联面板</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --line:#e3e6ea; --txt:#22262b; --muted:#7a828c; --ok:#1a9c6b; --bad:#d24a43; --accent:#2b6cb0; }
+  * { box-sizing:border-box; margin:0; }
+  body { font:14px/1.5 "Segoe UI","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--txt); padding:20px; }
+  header { display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; }
+  h1 { font-size:18px; }
+  .status { font-size:12px; color:var(--muted); }
+  .status b.locked { color:var(--bad); } .status b.unlocked { color:var(--ok); }
+  .toolbar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+  button { border:1px solid var(--line); background:var(--card); padding:6px 14px; border-radius:6px; cursor:pointer; font-size:13px; }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,.06); }
+  th,td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); font-size:13px; }
+  th { background:#fafbfc; color:var(--muted); font-weight:600; }
+  tr:last-child td { border-bottom:none; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:6px; }
+  .dot.on { background:var(--ok); } .dot.off { background:#c4c9cf; } .dot.unknown { background:#e0a93c; }
+  dialog { border:none; border-radius:10px; padding:20px; width:360px; box-shadow:0 8px 30px rgba(0,0,0,.18); }
+  dialog::backdrop { background:rgba(0,0,0,.35); }
+  dialog h2 { font-size:15px; margin-bottom:14px; }
+  label { display:block; font-size:12px; color:var(--muted); margin:10px 0 4px; }
+  input { width:100%; padding:7px 10px; border:1px solid var(--line); border-radius:6px; font-size:13px; }
+  .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:16px; }
+  .empty { text-align:center; color:var(--muted); padding:30px; }
+  #toast { position:fixed; bottom:20px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 18px; border-radius:20px; font-size:13px; display:none; }
+</style>
+</head>
+<body>
+<header>
+  <h1>枢联 · 远程桌面面板</h1>
+  <div class="status">主密码：<b id="lockState" class="locked">未解锁</b></div>
+</header>
+
+<div class="toolbar">
+  <button class="primary" id="btnNew">＋ 新建连接</button>
+  <button id="btnScan">批量探活</button>
+  <button id="btnUnlock">解锁</button>
+  <span style="flex:1"></span>
+  <span class="status" id="scanInfo"></span>
+</div>
+
+<table id="tbl">
+  <thead><tr><th>状态</th><th>主机</th><th>端口</th><th>用户</th><th>分组</th><th>最近连接</th><th>操作</th></tr></thead>
+  <tbody id="rows"><tr><td colspan="7" class="empty">加载中…</td></tr></tbody>
+</table>
+
+<dialog id="dlgNew">
+  <h2 id="dlgTitle">新建连接</h2>
+  <label>主机地址 *</label><input id="fHost" placeholder="例如 10.1.1.100">
+  <label>端口</label><input id="fPort" type="number" value="3389">
+  <label>用户名</label><input id="fUser">
+  <label>密码（留空=保留原值）</label><input id="fPass" type="password">
+  <label>分组</label><input id="fGroup">
+  <label>备注</label><input id="fRemark">
+  <div class="actions">
+    <button onclick="dlgNew.close()">取消</button>
+    <button class="primary" id="btnSave">保存</button>
+  </div>
+</dialog>
+
+<dialog id="dlgUnlock">
+  <h2>输入主密码解锁</h2>
+  <input id="fMaster" type="password" placeholder="主密码">
+  <div class="actions">
+    <button onclick="dlgUnlock.close()">取消</button>
+    <button class="primary" id="btnDoUnlock">解锁</button>
+  </div>
+</dialog>
+
+<div id="toast"></div>
+<script>
+const $ = s => document.querySelector(s);
+let editId = null;
+
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.style.display = 'block'; setTimeout(() => t.style.display = 'none', 2500); }
+
+async function refreshState() {
+  const s = await (await fetch('/api/security/state')).json();
+  const el = $('#lockState');
+  el.textContent = s.unlocked ? '已解锁' : '未解锁';
+  el.className = s.unlocked ? 'unlocked' : 'locked';
+  return s;
+}
+
+async function refreshList() {
+  const d = await (await fetch('/api/connections')).json();
+  const tb = $('#rows');
+  if (!d.items.length) { tb.innerHTML = '<tr><td colspan="7" class="empty">暂无连接——点「新建连接」添加</td></tr>'; return; }
+  tb.innerHTML = d.items.map(c => `
+    <tr>
+      <td><span class="dot ${c.online === true ? 'on' : c.online === false ? 'off' : 'unknown'}"></span>${c.online === true ? '在线' : c.online === false ? '离线' : '未知'}</td>
+      <td>${esc(c.host)}</td><td>${c.port}</td><td>${esc(c.userName || '—')}</td>
+      <td>${esc(c.groupName || '—')}</td><td>${esc(c.lastConnectedText || '从未')}</td>
+      <td>
+        <button onclick="connect(${c.id}, '${esc(c.host)}')">连接</button>
+        <button onclick="probe(${c.id})">探活</button>
+        <button onclick="edit(${c.id})">编辑</button>
+        <button onclick="del(${c.id}, '${esc(c.host)}')">删除</button>
+      </td>
+    </tr>`).join('');
+}
+
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+
+async function guardFetch(url, opts = {}) {
+  const r = await fetch(url, { headers: {'Content-Type': 'application/json'}, ...opts });
+  if (r.status === 401) {
+    const body = await r.json().catch(() => ({}));
+    if (body.needUnlock || body.error?.includes('解锁')) { dlgUnlock.showModal(); throw new Error('需要解锁'); }
+  }
+  return r;
+}
+
+$('#btnNew').onclick = () => { editId = null; $('#dlgTitle').textContent = '新建连接'; dlgNew.showModal(); };
+$('#btnScan').onclick = async () => {
+  $('#btnScan.disabled = true; $('#scanInfo').textContent = '探活中…';
+  try { await guardFetch('/api/scan', {method: 'POST'}); await refreshList(); $('#scanInfo').textContent = '探活完成 ' + new Date().toLocaleTimeString(); }
+  catch (e) { $('#scanInfo').textContent = ''; }
+  $('#btnScan.disabled = false;
+};
+$('#btnUnlock').onclick = () => dlgUnlock.showModal();
+$('#btnDoUnlock').onclick = async () => {
+  const r = await fetch('/api/security/unlock', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ masterPassword: $('#fMaster').value }) });
+  if (r.ok) { dlgUnlock.close(); $('#fMaster').value = ''; toast('已解锁'); refreshState(); } else { const b = await r.json(); toast(b.error || '解锁失败'); }
+};
+$('#btnSave').onclick = async () => {
+  const form = { host: $('#fHost').value, port: +$('#fPort').value, userName: $('#fUser').value, password: $('#fPass').value, groupName: $('#fGroup').value, remark: $('#fRemark').value };
+  const url = editId ? `/api/connections/${editId}` : '/api/connections';
+  const r = await guardFetch(url, { method: editId ? 'PUT' : 'POST', body: JSON.stringify(form) });
+  if (r.ok) { dlgNew.close(); toast(editId ? '已更新' : '已创建'); resetForm(); refreshList(); }
+  else { const b = await r.json().catch(() => ({})); toast(b.error || '保存失败'); }
+};
+
+function resetForm() { ['fHost','fUser','fPass','fGroup','fRemark'].forEach(id => $('#'+id).value = ''); $('#fPort').value = 3389; editId = null; }
+async function edit(id) {
+  const d = await (await fetch('/api/connections')).json();
+  const c = d.items.find(x => x.id === id); if (!c) return;
+  editId = id; $('#dlgTitle').textContent = `编辑 ${c.host}`;
+  $('#fHost').value = c.host; $('#fPort').value = c.port; $('#fUser').value = c.userName || '';
+  $('#fPass').value = ''; $('#fGroup').value = c.groupName || ''; $('#fRemark').value = c.remark || '';
+  dlgNew.showModal();
+}
+async function del(id, host) { if (!confirm(`删除连接 ${host}？`)) return; await guardFetch(`/api/connections/${id}`, {method: 'DELETE'}); toast('已删除'); refreshList(); }
+async function probe(id) { const r = await (await guardFetch(`/api/probe/${id}`, {method:'POST'})).json(); toast(r.online ? '在线' : '离线'); refreshList(); }
+async function connect(id, host) {
+  const r = await guardFetch(`/api/connect/${id}`, { method: 'POST', body: JSON.stringify({}) });
+  if (r.ok) { toast(`已发起连接 ${host}（客户端窗口即将弹出）`); }
+  else { const b = await r.json().catch(() => ({})); if (b.needUnlock) { dlgUnlock.showModal(); } else toast(b.error || '连接失败'); }
+}
+
+refreshState(); refreshList();
+</script>
+</body>
+</html>
